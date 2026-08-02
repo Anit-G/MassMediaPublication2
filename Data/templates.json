@@ -1,0 +1,482 @@
+{
+    "BGM_mapping": {
+        "fireplace.mp3": [
+            "Lit Fireplace",
+            "lurpsis (Freesound)"
+        ],
+        "fireplace_and_rain.mp3": [
+            "Aachen_Burning Fireplace Crackling Fire Sounds",
+            "visionear (Freesound)"
+        ],
+        "fireplace_softer.mp3": [
+            "Fireplace Loop Original Noise",
+            "King_of_The_Christmas"
+        ],
+        "fireplace_piano.mp3": [
+            "Crackling Fireplace and Soft Piano Music",
+            "JuliusH"
+        ],
+        "radio_am_static.mp3": [
+            "AM radio static",
+            "RobertMThomas (Freesound)"
+        ],
+        "tv_static.mp3": [
+            "Soothing White Noise",
+            "DRAGON-STUDIO"
+        ],
+        "rain_calming.mp3": [
+            "CALMING RAIN",
+            "Liecio"
+        ],
+        "rain_onmetal.mp3": [
+            "Rain sound",
+            "MindMist"
+        ],
+        "rain_distantthunder.mp3": [
+            "Night Rain with Distant Thunder",
+            "MindMist"
+        ],
+        "night_ambience_with_crickets.mp3": [
+            "Night Ambience with Cricket Sound",
+            "TanwerAman"
+        ],
+        "cricket_night_night_bugs_at_forest.mp3": [
+            "Cricket Sound at Night (Night Bugs at Forest )",
+            "TanwerAman"
+        ],
+        "ocean_waves1.mp3": [
+            "Ocean Waves",
+            "RichardMultimedia"
+        ],
+        "ocean_waves2.mp3": [
+            "WATER OCEAN WAVES 01",
+            "sengjinn (Freesound)"
+        ],
+        "underwater_ambience1.mp3": [
+            "Underwater Ambience",
+            "Fission9 (Freesound)"
+        ],
+        "deep_sea_ambience.mp3": [
+            "Deep Sea Ambience",
+            "jhumbucker (Freesound)"
+        ],
+        "submarine_internal.mp3": [
+            "Submarine internal",
+            "blaukrez (Freesound)"
+        ],
+        "soft_piano.mp3": [
+            "Beautiful Piano Music",
+            "Clavier-music"
+        ],
+        "llulaby_piano.mp3": [
+            "Lullaby - Sleep Piano Music",
+            "Clavier-music"
+        ],
+        "murmur.mp3": [
+            "Murmur",
+            "Ben_0815 (Freesound)"
+        ],
+        "distant-bells-ringing.mp3": [
+            "Distant Bells Ringing",
+            "Alex_Jauk"
+        ],
+        "writing-with-fountain-pen-nib.mp3": [
+            "Writing with Fountain Pen Nib",
+            "black_trillium (Freesound)"
+        ],
+        "tawny-owl-in-molkom-sweden.mp3": [
+            "Tawny Owl in Molkom, Sweden",
+            "Marcuspepsi (Freesound)"
+        ],
+        "frogs-croaking.mp3": [
+            "Frogs Croaking",
+            "DRAGON-STUDIO"
+        ],
+        "big-river.mp3": [
+            "Big River",
+            "SoundReality"
+        ],
+        "jungle-drums-loop.mp3": [
+            "Cinematic Action Jungle drums loop 125bpm",
+            "WilliamHector"
+        ],
+        "eagle-scream.mp3": [
+            "Eagle Scream",
+            "iedurodrigues"
+        ],
+        "desert-wind-1.mp3": [
+            "Desert Wind 1",
+            "TanwerAman"
+        ],
+        "desert-wind-2.mp3": [
+            "Desert Wind 2",
+            "TanwerAman"
+        ],
+        "breaking-wood.mp3": [
+            "Breaking Wood",
+            "DRAGON-STUDIO"
+        ],
+        "wood-creaking.mp3": [
+            "Wood Creaking",
+            "freesound_community"
+        ],
+        "seagulls-distant.mp3": [
+            "Seagulls Distant",
+            "freesound_community"
+        ],
+        "sounds-of-waves.mp3": [
+            "Sounds of Waves",
+            "MindMist"
+        ],
+        "middle-eastern-percussion.mp3": [
+            "Middle Eastern Percussion (World, Oriental)",
+            "Ashot_Danielyan"
+        ],
+        "pirate-jolly-roger-loop.mp3": [
+            "Pirate Jolly Roger Loop",
+            "Ebunny"
+        ],
+        "fantasy-flute.mp3": [
+            "Samurai Flutes | Ethereal Fantasy Flute Relaxing Meditation Music",
+            "Onetent"
+        ],
+        "footsteps-in-snow.mp3": [
+            "Footsteps in Snow",
+            "DRAGON-STUDIO"
+        ],
+        "howling-hissy-blizard.mp3": [
+            "Howling Hissy Blizard",
+            "TanwerAman"
+        ],
+        "horror-background.mp3": [
+            "Horror Background",
+            "Tunetank"
+        ],
+        "chocolate-galaxy-waltz-background-music.mp3": [
+            "Chocolate Galaxy Waltz Background Music",
+            "aidanpinsent"
+        ],
+        "solo-harp-no-copyright-music.mp3": [
+            "Solo Harp No Copyright Music",
+            "RibhavAgrawal"
+        ],
+        "MixDarkNight.mp3": [
+            "Dark atmosphere with rain",
+            "milagrosgomez"
+        ],
+        "MixUnderOcean.mp3": [
+            "Audio Mix - Lullaby - Sleep Piano Music, Underwater Ambience, WATER OCEAN WAVES 01",
+            "Clavier-music, Fission9, sengjinn (Freesound)"
+        ],
+        "MixFirenRain.mp3": [
+            "Audio Mix - Beautiful Piano Music, Lit Fireplace, Night Rain with Distant Thunder, Night Ambience with Cricket Sound",
+            "Clavier-music, lurpsis (Freesound), MindMist, TanwerAman"
+        ],
+        "MixLibrary.mp3": [
+            "Audio Mix - Lit Fireplace, Writing with Fountain Pen Nib, Distant Bells Ringing, Murmur",
+            "lurpsis (Freesound), black_trillium (Freesound), Alex_Jauk, Ben_0815 (Freesound)"
+        ],
+        "MixForest.mp3": [
+            "Audio Mix - CALMING RAIN, Cricket Sound at Night (Night Bugs at Forest ), Frogs Croaking, Tawny Owl in Molkom, Sweden",
+            "Liecio, TanwerAman, DRAGON-STUDIO, Marcuspepsi (Freesound)"
+        ],
+        "MixDesert.mp3": [
+            "Audio Mix - Through the Desert",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixHighSeas.mp3": [
+            "Audio Mix - High Seas",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixJungle.mp3": [
+            "Audio Mix - In the Jungle",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixMountainPath.mp3": [
+            "Audio Mix - Climbing the mountain peak",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixFoggyAlley.mp3": [
+            "Audio Mix - The foggy back alley",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixMansion.mp3": [
+            "Audio Mix - Left alone in a mansion",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixDarkLibrary.mp3": [
+            "Audio Mix - Dark Library",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixDreamlandLullaby.mp3": [
+            "Audio Mix - Dreamy Lullaby",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixMagicMarket.mp3": [
+            "Audio Mix - Magical Market",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixPizzicato.mp3": [
+            "Audio Mix - Pizzicato",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixEnchantingMeadow.mp3": [
+            "Audio Mix - Enchanting Elven Meadows",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixClassicalStudy.mp3": [
+            "Audio Mix - Victorian Study Room",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixMilkyway.mp3": [
+            "Audio Mix - The milkyway",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixRomanceEra.mp3": [
+            "Audio Mix - Romance and Drama",
+            "Mixed by me, source from Pixabay"
+        ],
+        "MixWaltz.mp3": [
+            "Audio Mix - Do the Waltz",
+            "Mixed by me, source from Pixabay"
+        ]
+    },
+    "TTS_model_mapping": {
+        "kokoro": [
+            "hexgrad/Kokoro-82M",
+            "Apache license 2.0"
+        ]
+    },
+    "discription": {
+        "desc": "**DISCLAIMER THIS CONTENT IS AI GENERATED**\nThis video features text from Project Gutenberg (www.gutenberg.org), Title: [BOOK_NAME] by [AUTHOR].\nNarration generated using [hexgrad/Kokoro-82M], licensed under [Apache license 2.0].\nBackground music: [TRACK_NAME] by [ARTIST], licensed under [Pixabay Content License], sourced from Pixabay (www.pixabay.com).\nAll content used is believed to be in the public domain or used under appropriate licenses. If you believe any content infringes on your rights, please contact us."
+    },
+    "central_tags": [
+        "Relaxing Audio Book",
+        "calm voice reading",
+        "chill audiobook",
+        "soothing narration",
+        "classic audiobook",
+        "bedtime story",
+        "public domain audiobook",
+        "relaxing audio for sleep",
+        "sleep aid audiobook",
+        "ambient storytelling",
+        "background story",
+        "meditative listening"
+    ],
+    "cat(RS)": [
+        "MixFirenRain.mp3",
+        "MixUnderOcean.mp3",
+        "MixLibrary.mp3",
+        "MixForest.mp3"
+    ],
+    "cat(TA)": [
+        "MixDesert.mp3",
+        "MixDreamlandLullaby.mp3"
+    ],
+    "cat(MS)": [
+        "MixFoggyAlley.mp3",
+        "MixMansion.mp3",
+        "MixDarkNight.mp3",
+        "MixPizzicato.mp3",
+        "MixDarkLibrary.mp3"
+    ],
+    "cat(WE)": [
+        "MixMountainPath.mp3",
+        "MixMagicMarket.mp3",
+        "MixHighSeas.mp3",
+        "MixJungle.mp3",
+        "MixEnchantingMeadow.mp3"
+    ],
+    "cat(LM)": [
+        "MixClassicalStudy.mp3",
+        "MixMilkyway.mp3",
+        "MixRomanceEra.mp3",
+        "MixWaltz.mp3"
+    ],
+    "available_BGVs": [
+        "BrickFireplaceHighContrast.mp4",
+        "CabinFireplace.mp4",
+        "MCCampfire.mp4",
+        "MCCampfireOverlay.mp4",
+        "MCFireFly.mp4",
+        "MCInsideCabin.mp4",
+        "MCOceanBottom.mp4",
+        "MCOutpost.mp4",
+        "MCPlainsStill.mp4",
+        "MCShoreCave.mp4",
+        "MCStillSkies.mp4",
+        "MCUnderside.mp4",
+        "MCUnderwater.mp4",
+        "MCUnderwaterStar.mp4",
+        "WoodStoveFireplace.mp4"
+    ],
+    "available_BGV_Shortform": [
+        "ShortMCSunset"
+    ],
+    "book_default": {
+        "BGM": "",
+        "BGV": "",
+        "BGP": "",
+        "thumbnail": "",
+        "short": "",
+        "tags": [],
+        "use_BGV": false
+    },
+    "book_1": {
+        "BGM": "MixMountainPath.mp3",
+        "BGV": "testBGPVoxel.mp4",
+        "BGP": "testBGPVoxel.mp4",
+        "thumbnail": "testBGPVoxel.jpg",
+        "short": "testBGPVoxel.mp4",
+        "tags": ["TEST BOOK 1"],
+        "use_BGV": false
+    },
+    "book_2": {
+        "BGM": "MixDesert.mp3",
+        "BGV": "testBGPVoxel.mp4",
+        "BGP": "testBGPVoxel.mp4",
+        "thumbnail": "testBGPVoxel.jpg",
+        "short": "testBGPVoxel.mp4",
+        "tags": ["TEST BOOK 2"],
+        "use_BGV": false
+    },
+    "book_3": {
+        "BGM": "MixFirenRain.mp3",
+        "BGV": "testBGPReading.mp4",
+        "BGP": "testBGPReading.mp4",
+        "thumbnail": "testBGPReading.jpg",
+        "short": "testBGPReading.mp4",
+        "tags": ["TEST BOOK 3"],
+        "use_BGV": false
+    },
+    "book_4": {
+        "BGM": "MixFoggyAlley.mp3",
+        "BGV": "testBGPReading.mp4",
+        "BGP": "testBGPReading.mp4",
+        "thumbnail": "testBGPReading.jpg",
+        "short": "testBGPReading.mp4",
+        "tags": ["TEST BOOK 4"],
+        "use_BGV": false
+    },
+    "book_5": {
+        "BGM": "MixClassicalStudy.mp3",
+        "BGV": "testBGPReading.mp4",
+        "BGP": "testBGPReading.mp4",
+        "thumbnail": "testBGPReading.jpg",
+        "short": "testBGPReading.mp4",
+        "tags": ["TEST BOOK 5"],
+        "use_BGV": false
+    },
+    "book_11": {
+        "BGM": "MixFirenRain.mp3",
+        "BGV": "book_11.mp4",
+        "BGP": "book_11.mp4",
+        "thumbnail": "default_thumbnail.jpg",
+        "Short": "ShortMCsunset.mp4",
+        "tags": [
+            "alice in wonder land",
+            "alice in wonder land audiobook"
+        ],
+        "use_BGV": true
+    },
+    "book_64320": {
+        "BGM": "MixWaltz.mp3",
+        "BGV": "book_64320.mp4",
+        "BGP": "book_64320.mp4",
+        "thumbnail": "book_64320.jpg",
+        "short": "book_64320.mp4",
+        "tags": [
+            "The Manchester Man by Mrs. G. Linnaeus Banks"
+        ],
+        "use_BGV": false
+    },
+    "book_19805": {
+        "BGM": "MixMansion.mp3",
+        "BGV": "book_19805.mp4",
+        "BGP": "book_19805.mp4",
+        "thumbnail": "book_19805.jpg",
+        "short": "book_19805.mp4",
+        "tags": [
+            "The Tale of Mr. Tod by Beatrix Potter"
+        ],
+        "use_BGV": false
+    },
+    "book_1342": {
+        "BGM": "MixLibrary.mp3",
+        "BGV": "book_1342.mp4",
+        "BGP": "book_1342.mp4",
+        "thumbnail": "book_1342.jpg",
+        "short": "book_1342.mp4",
+        "tags": [
+            "Pride and Prejudice by Jane Austen"
+        ],
+        "use_BGV": false
+    },
+    "book_7100": {
+        "BGM": "MixEnchantingMeadow.mp3",
+        "BGV": "book_7100.mp4",
+        "BGP": "book_7100.mp4",
+        "thumbnail": "book_7100.jpg",
+        "short": "book_7100.mp4",
+        "tags": [
+            "Adventures of Huckleberry Finn, Chapters 01 to 05 by Mark Twain"
+        ],
+        "use_BGV": false
+    },
+    "book_16": {
+        "BGM": "MixMagicMarket.mp3",
+        "BGV": "book_16.mp4",
+        "BGP": "book_16.mp4",
+        "thumbnail": "book_16.jpg",
+        "short": "book_16.mp4",
+        "tags": [
+            "Peter Pan by J. M. Barrie"
+        ],
+        "use_BGV": false
+    },
+    "book_46": {
+        "BGM": "MixForest.mp3",
+        "BGV": "book_46.mp4",
+        "BGP": "book_46.mp4",
+        "thumbnail": "book_46.jpg",
+        "short": "book_46.mp4",
+        "tags": [
+            "A Christmas Carol in Prose; Being a Ghost Story of Christmas by Charles Dickens"
+        ],
+        "use_BGV": false
+    },
+    "book_7101": {
+        "BGM": "MixJungle.mp3",
+        "BGV": "book_7101.mp4",
+        "BGP": "book_7101.mp4",
+        "thumbnail": "book_7101.jpg",
+        "short": "book_7101.mp4",
+        "tags": [
+            "Adventures of Huckleberry Finn, Chapters 06 to 10 by Mark Twain"
+        ],
+        "use_BGV": false
+    },
+    "book_1260": {
+        "BGM": "MixRomanceEra.mp3",
+        "BGV": "book_1260.mp4",
+        "BGP": "book_1260.mp4",
+        "thumbnail": "book_1260.jpg",
+        "short": "book_1260.mp4",
+        "tags": [
+            "Jane Eyre: An Autobiography by Charlotte Bront\u00eb"
+        ],
+        "use_BGV": false
+    },
+    "book_1661": {
+        "BGM": "MixFoggyAlley.mp3",
+        "BGV": "book_1661.mp4",
+        "BGP": "book_1661.mp4",
+        "thumbnail": "book_1661.jpg",
+        "short": "book_1661.mp4",
+        "tags": [
+            "The Adventures of Sherlock Holmes by Arthur Conan Doyle"
+        ],
+        "use_BGV": false
+    }
+}

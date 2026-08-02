@@ -1,0 +1,6 @@
+{
+  "name": "Mass Media Publication Pipeline",
+  "description": "Automated pipeline that scrapes public-domain books, converts chapters into narrated audio, and assembles video content.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

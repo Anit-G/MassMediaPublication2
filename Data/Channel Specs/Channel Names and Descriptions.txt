@@ -1,0 +1,70 @@
+ Shortform  Categoris                   [voice_codes]       YouTube Channel ID         Channel Name               Channel Tag  
+---------  --------------------------  ------------------  -------------------------  -------------------------  -------------------------
+
+cat(RS)    Relaxing and Soothing       [3,7]               UCXeqq2XcvF7jjEcv35dPl8A   Echo's Slumber             @EchoSlumber
+cat(TA)    Thrilling and Adventurous   [15,19]             UCGKLnKX4AF6r1Fz86BvUPEw   Orpheus Odes               @OrpheusOdes
+cat(MS)    Mystery and Suspense        [18,26]             UCfOw-0ovjVZSE8HvaCNJJ_Q   Erebus Echoes              @ErebosEchoes
+cat(WE)    Whimsical escapism          [20, 23]            UCKpi4fdhxKbO_DWUD3FODTA   MoonBerry Echoes           @MoonBerryEchoes
+cat(LM)    Litrary Masterpieces        [17, 22]            UChDu5fX4ICAQSgdT653TGzA   Marrow & Manuscripts       @MarrowManuscripts
+
+Data Distribution:
+About the 200 have good amount of ratings on them
+
+frequency per category
+cat(RS) - 1193
+cat(TA) - 2505
+cat(MS) - 737
+cat(WE) - 1706
+cat(LM) - 2404
+
+Total Number of book: 	8545
+Books Non-Parseable: 	1493
+Books Parseable:		7052
+
+
+Channel Descriptions:
+
+Echo's Slumber             @EchoSlumber
+	Welcome to Echo Slumber — where calming voices meet timeless classics. Drift into rest with soothing audiobooks, serene storytelling, and peaceful narration powered by AI. Whether you're winding down, meditating, or seeking sleep, let our echoes guide you into gentle slumber. New relaxing uploads daily.
+	Mythology: "Echo" references the Greek nymph cursed to repeat only what others say
+
+Orpheus Odes               @OrpheusOdes
+	Welcome to Orpheus Odes — a dedicated home for thrill, adventure, and the music of old stories. I narrate carefully selected public-domain works (sourced from Project Gutenberg and other classic archives), from epics and heroic sagas to sea-faring adventures and mysterious fables. Each episode is a full reading or a themed playlist, lovingly performed for late-night listening, study, or long journeys.
+
+Erebus Echoes              @ErebosEchoes
+	Welcome to Erebus Echoes — your gateway to thrilling audiobooks of mystery, suspense, and shadowed adventures. Inspired by the Greek god of darkness, Erebus, this channel delivers stories that transport you into foggy streets, haunted minds, and dangerous quests. Listen closely… the echoes are calling.
+	Mythology: "Echo" references the Greek nymph cursed to repeat only what others say
+
+MoonBerry Echoes           @MoonBerryEchoes
+	MoonBerry Echoes — soothing, whimsical audiobooks for moonlit minds. We adapt public-domain classics (sourced from Project Gutenberg) into full-length recordings using Kokoro TTS, with careful audio mastering and chapter timestamps. Ideal for bedtime, relaxation, and imaginative escape — subscribe for new uploads and curated playlists.
+	Mythology: "Echo" references the Greek nymph cursed to repeat only what others say
+
+Marrow & Manuscripts       @MarrowManuscripts
+	Marrow & Manuscript — Deep, reverent audiobook readings of the literary canon.
+	We transform public-domain classics into full-length audiobooks using Kokoro TTS tuned for a slow, robust narration style. Expect careful audio mastering, clear chapter timestamps, and full credit to Project Gutenberg in every description. Ideal for focused study, late-night listening, and anyone who prefers weighty, contemplative readings of literary masterpieces. Subscribe for new uploads and playlists of curated classics.
+
+
+Prompt to generate a youtube banner:
+	You are youtube Master and SEO wizard so to say, that specializes in the creation of YouTube channel homepages that are creative and meaningful. I have to created a YouTube channel that takes books from Project Gutenberg and converts them into audio books via Kokoro TTS and a pipes then into FFMPEG, it can work both in the YouTube videos and as a feature video on the channel. The feeling of these books that are put on the channel are along the lines of {Mystery and suspense}. Lets try something with a bit spooky and mysterious that gives of a sense of suspense. Note make sure it doesn't have any text in it other the then channel name {Erebus Echoes} I need the channel banner
+
+Prompt to label and categorize the books:
+	You are a librarian from the GoodReads library, your job is helping people with their book related queries with factual information and giving opinions about said books,
+	I am going to give you a list of book I want you to find the good reads rating for each book and the number of ratings done on the book. Afterwards I want you  to assign each book one of the following themes based on the feeling of the book if that book was read to you aloud, themes:
+	Relaxing and Soothing
+	Thrilling and Adventurous
+	Mystery and Suspense
+	Whimsical escapism
+	Literary Masterpieces
+
+	All must the information then needs to be consolidated in the following format and displayed displayed in the following format
+
+	{book name, rating, total number of ratings, theme}
+
+	Where book name is the from the list I give you
+	rating is the good reads rating that was found previously
+	total number of ratings is the total ratings done on the book that was found previously the output for this needs to be only a number no punctuations
+	theme is the theme assigned to the book that was asked to be done above
+
+	Warning: the final display format should follow the above {book name, rating, total number of ratings, theme}. The output should be a list of entries in that format for each line, and nothing else should be present in the output list
+
+	Book List:

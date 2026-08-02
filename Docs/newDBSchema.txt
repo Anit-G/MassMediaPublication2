@@ -1,0 +1,256 @@
+-- New Database Schema for State Tracking and Progress Management
+-- Version: 2.0
+-- Created: 2026-04-26
+
+-- ============================================================================
+-- PROCESSING_STATE TABLE
+-- Tracks overall progress for each ebook/voice_code/category combination
+-- ============================================================================
+CREATE TABLE "PROCESSING_STATE" (
+	"id"	INTEGER,
+	"ebook_no"	INTEGER NOT NULL,
+	"voice_code"	INTEGER NOT NULL,
+	"category"	TEXT NOT NULL,
+	"current_chapter_idx"	INTEGER DEFAULT 0,
+	"stage"	TEXT NOT NULL CHECK("stage" IN ('IDLE', 'PARSED', 'AUDIO_GEN', 'VIDEO_GEN', 'UPLOAD', 'COMPLETE')),
+	"last_updated_timestamp"	DATETIME DEFAULT CURRENT_TIMESTAMP,
+	"error_log"	TEXT,
+	"created_timestamp"	DATETIME DEFAULT CURRENT_TIMESTAMP,
+	"rating"	INTEGER,
+	UNIQUE("ebook_no","voice_code","category"),
+	PRIMARY KEY("id" AUTOINCREMENT),
+	FOREIGN KEY("ebook_no") REFERENCES "books"("ebook_no")
+);
+
+-- Index for fast lookups
+CREATE INDEX IF NOT EXISTS idx_processing_state_ebook_voice 
+ON PROCESSING_STATE(ebook_no, voice_code, category);
+
+CREATE INDEX IF NOT EXISTS idx_processing_state_stage 
+ON PROCESSING_STATE(stage);
+
+-- ============================================================================
+-- CHAPTER_PROGRESS TABLE
+-- Tracks detailed progress for each chapter through all pipeline stages
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS CHAPTER_PROGRESS (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ebook_no INTEGER NOT NULL,
+    voice_code INTEGER NOT NULL,
+    chapter_idx INTEGER NOT NULL,
+    category TEXT NOT NULL,
+    
+    -- Audio Generation Stage
+    audio_status TEXT DEFAULT 'NOT_STARTED' CHECK(audio_status IN (
+        'NOT_STARTED', 'GENERATING', 'COMPLETED', 'FAILED', 'AUDIO_ARCHIVED', 'DELETED'
+    )),
+    audio_path TEXT,
+    audio_generated_timestamp DATETIME,
+    
+    -- Video Generation Stage
+    video_status TEXT DEFAULT 'NOT_STARTED' CHECK(video_status IN (
+        'NOT_STARTED', 'GENERATING', 'COMPLETED', 'FAILED', 'VIDEO_ARCHIVED', 'DELETED'
+    )),
+    video_path TEXT,
+    video_generated_timestamp DATETIME,
+    waveform_path TEXT,
+    
+    -- Upload Stage
+    upload_status TEXT DEFAULT 'NOT_STARTED' CHECK(upload_status IN (
+        'NOT_STARTED', 'UPLOADING', 'COMPLETED', 'FAILED', 'PAUSED_QUOTA_EXCEEDED', 'MANUAL_REVIEW_NEEDED', 'DELETED'
+    )),
+    youtube_url TEXT,
+    upload_generated_timestamp DATETIME,
+    
+    -- Retry and Error Tracking
+    retry_count INTEGER DEFAULT 0,
+    next_retry_timestamp DATETIME,
+    error_message TEXT,
+    error_type TEXT CHECK(error_type IN ('TRANSIENT', 'PERMANENT', 'API_QUOTA', 'UNKNOWN')) DEFAULT 'UNKNOWN',
+    
+    -- Metadata
+    created_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_status_change_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Constraints
+    UNIQUE(ebook_no, voice_code, chapter_idx, category),
+    FOREIGN KEY(ebook_no) REFERENCES books(ebook_no)
+);
+
+-- Indexes for efficient queries
+CREATE INDEX IF NOT EXISTS idx_chapter_progress_ebook_voice_idx 
+ON CHAPTER_PROGRESS(ebook_no, voice_code, chapter_idx);
+
+CREATE INDEX IF NOT EXISTS idx_chapter_progress_audio_status 
+ON CHAPTER_PROGRESS(audio_status);
+
+CREATE INDEX IF NOT EXISTS idx_chapter_progress_video_status 
+ON CHAPTER_PROGRESS(video_status);
+
+CREATE INDEX IF NOT EXISTS idx_chapter_progress_upload_status 
+ON CHAPTER_PROGRESS(upload_status);
+
+CREATE INDEX IF NOT EXISTS idx_chapter_progress_retry_timestamp 
+ON CHAPTER_PROGRESS(next_retry_timestamp) WHERE next_retry_timestamp IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_chapter_progress_error_type 
+ON CHAPTER_PROGRESS(error_type) WHERE error_type IN ('PERMANENT', 'API_QUOTA');
+
+-- ============================================================================
+-- SHORTS_PROGRESS TABLE
+-- Tracks progress for short-form content generated from chapters
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS SHORTS_PROGRESS (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ebook_no INTEGER NOT NULL,
+    voice_code INTEGER NOT NULL,
+    chapter_idx INTEGER NOT NULL,
+    short_idx INTEGER NOT NULL,
+    category TEXT NOT NULL,
+    
+    -- Audio Generation Stage
+    audio_status TEXT DEFAULT 'NOT_STARTED' CHECK(audio_status IN (
+        'NOT_STARTED', 'GENERATING', 'COMPLETED', 'FAILED', 'AUDIO_ARCHIVED', 'DELETED'
+    )),
+    audio_path TEXT,
+    audio_generated_timestamp DATETIME,
+    
+    -- Video Generation Stage
+    video_status TEXT DEFAULT 'NOT_STARTED' CHECK(video_status IN (
+        'NOT_STARTED', 'GENERATING', 'COMPLETED', 'FAILED', 'VIDEO_ARCHIVED', 'DELETED'
+    )),
+    video_path TEXT,
+    video_generated_timestamp DATETIME,
+    waveform_path TEXT,
+    
+    -- Upload Stage
+    upload_status TEXT DEFAULT 'NOT_STARTED' CHECK(upload_status IN (
+        'NOT_STARTED', 'UPLOADING', 'COMPLETED', 'FAILED', 'PAUSED_QUOTA_EXCEEDED', 'MANUAL_REVIEW_NEEDED', 'DELETED'
+    )),
+    youtube_url TEXT,
+    youtube_shorts_url TEXT,
+    upload_generated_timestamp DATETIME,
+    
+    -- Retry and Error Tracking
+    retry_count INTEGER DEFAULT 0,
+    next_retry_timestamp DATETIME,
+    error_message TEXT,
+    error_type TEXT CHECK(error_type IN ('TRANSIENT', 'PERMANENT', 'API_QUOTA', 'UNKNOWN')) DEFAULT 'UNKNOWN',
+    
+    -- Metadata
+    created_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_status_change_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Constraints
+    UNIQUE(ebook_no, voice_code, chapter_idx, short_idx, category),
+    FOREIGN KEY(ebook_no) REFERENCES books(ebook_no)
+);
+
+-- Indexes for efficient queries
+CREATE INDEX IF NOT EXISTS idx_shorts_progress_ebook_voice_chapter 
+ON SHORTS_PROGRESS(ebook_no, voice_code, chapter_idx);
+
+CREATE INDEX IF NOT EXISTS idx_shorts_progress_audio_status 
+ON SHORTS_PROGRESS(audio_status);
+
+CREATE INDEX IF NOT EXISTS idx_shorts_progress_video_status 
+ON SHORTS_PROGRESS(video_status);
+
+CREATE INDEX IF NOT EXISTS idx_shorts_progress_upload_status 
+ON SHORTS_PROGRESS(upload_status);
+
+CREATE INDEX IF NOT EXISTS idx_shorts_progress_retry_timestamp 
+ON SHORTS_PROGRESS(next_retry_timestamp) WHERE next_retry_timestamp IS NOT NULL;
+
+-- ============================================================================
+-- SCHEMA_VERSION TABLE
+-- Tracks database schema version for migrations
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS SCHEMA_VERSION (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    version INTEGER NOT NULL UNIQUE,
+    migration_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    description TEXT,
+    status TEXT DEFAULT 'COMPLETED' CHECK(status IN ('IN_PROGRESS', 'COMPLETED', 'ROLLBACK'))
+);
+
+-- Insert initial schema version record
+INSERT OR IGNORE INTO SCHEMA_VERSION (version, description) 
+VALUES (2, 'Initial state tracking schema with PROCESSING_STATE, CHAPTER_PROGRESS, SHORTS_PROGRESS tables');
+
+-- ============================================================================
+-- USEFUL VIEWS
+-- ============================================================================
+
+-- View: Book Processing Summary
+CREATE VIEW IF NOT EXISTS book_processing_summary AS
+SELECT 
+    ps.ebook_no,
+    ps.voice_code,
+    ps.category,
+    ps.stage,
+    ps.current_chapter_idx,
+    COUNT(DISTINCT cp.chapter_idx) as total_chapters,
+    SUM(CASE WHEN cp.audio_status = 'COMPLETED' THEN 1 ELSE 0 END) as audio_completed,
+    SUM(CASE WHEN cp.audio_status = 'GENERATING' THEN 1 ELSE 0 END) as audio_generating,
+    SUM(CASE WHEN cp.audio_status = 'FAILED' THEN 1 ELSE 0 END) as audio_failed,
+    SUM(CASE WHEN cp.video_status = 'COMPLETED' THEN 1 ELSE 0 END) as video_completed,
+    SUM(CASE WHEN cp.video_status = 'GENERATING' THEN 1 ELSE 0 END) as video_generating,
+    SUM(CASE WHEN cp.video_status = 'FAILED' THEN 1 ELSE 0 END) as video_failed,
+    SUM(CASE WHEN cp.upload_status = 'COMPLETED' THEN 1 ELSE 0 END) as upload_completed,
+    SUM(CASE WHEN cp.upload_status = 'UPLOADING' THEN 1 ELSE 0 END) as upload_uploading,
+    SUM(CASE WHEN cp.upload_status = 'FAILED' THEN 1 ELSE 0 END) as upload_failed,
+    ps.last_updated_timestamp
+FROM PROCESSING_STATE ps
+LEFT JOIN CHAPTER_PROGRESS cp ON ps.ebook_no = cp.ebook_no 
+    AND ps.voice_code = cp.voice_code 
+    AND ps.category = cp.category
+GROUP BY ps.ebook_no, ps.voice_code, ps.category, ps.stage;
+
+-- View: Chapters Ready for Retry
+CREATE VIEW IF NOT EXISTS chapters_pending_retry AS
+SELECT 
+    ebook_no,
+    voice_code,
+    chapter_idx,
+    category,
+    CASE 
+        WHEN audio_status = 'FAILED' THEN 'AUDIO_GEN'
+        WHEN video_status = 'FAILED' THEN 'VIDEO_GEN'
+        WHEN upload_status = 'FAILED' THEN 'UPLOAD'
+    END as stage,
+    retry_count,
+    error_message,
+    next_retry_timestamp,
+    DATETIME('now') as current_time
+FROM CHAPTER_PROGRESS
+WHERE (audio_status = 'FAILED' OR video_status = 'FAILED' OR upload_status = 'FAILED')
+    AND retry_count < 3
+    AND next_retry_timestamp <= DATETIME('now')
+ORDER BY next_retry_timestamp ASC;
+
+-- View: Manual Review Needed
+CREATE VIEW IF NOT EXISTS manual_review_needed AS
+SELECT 
+    ebook_no,
+    voice_code,
+    chapter_idx,
+    category,
+    CASE 
+        WHEN audio_status = 'FAILED' THEN 'AUDIO_GEN'
+        WHEN video_status = 'FAILED' THEN 'VIDEO_GEN'
+        WHEN upload_status IN ('FAILED', 'MANUAL_REVIEW_NEEDED', 'PAUSED_QUOTA_EXCEEDED') THEN 'UPLOAD'
+    END as stage,
+    retry_count,
+    error_type,
+    error_message,
+    last_status_change_timestamp
+FROM CHAPTER_PROGRESS
+WHERE (audio_status = 'FAILED' AND retry_count >= 3)
+    OR (video_status = 'FAILED' AND retry_count >= 3)
+    OR upload_status IN ('MANUAL_REVIEW_NEEDED', 'PAUSED_QUOTA_EXCEEDED')
+ORDER BY last_status_change_timestamp ASC;
+
+-- ============================================================================
+-- END OF SCHEMA
+-- ============================================================================

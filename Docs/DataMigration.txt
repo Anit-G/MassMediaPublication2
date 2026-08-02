@@ -1,0 +1,462 @@
+-- Migration Script: Transfer data from old schema (ebook_lib, ebook_list) to new schema
+-- (PROCESSING_STATE, CHAPTER_PROGRESS, SHORTS_PROGRESS)
+-- Version: 2.0
+-- Created: 2026-04-26
+-- Purpose: One-time migration maintaining data integrity and state tracking
+
+-- ============================================================================
+-- PHASE 0: BACKUP VALIDATION
+-- Ensure source tables exist before migration
+-- ============================================================================
+
+-- Check if source tables exist and have data
+SELECT 
+    'Pre-migration check' as check_type,
+    COUNT(DISTINCT ebook_no) as ebook_list_count
+FROM ebook_list;
+
+SELECT 
+    'Pre-migration check' as check_type,
+    COUNT(*) as ebook_lib_rows,
+    COUNT(DISTINCT ebook_no) as unique_ebooks,
+    COUNT(DISTINCT voice_code) as unique_voices
+FROM ebook_lib;
+
+-- ============================================================================
+-- PHASE 1: POPULATE PROCESSING_STATE from ebook_list
+-- Maps old pipeline stages to new stage enum
+-- ============================================================================
+
+INSERT INTO PROCESSING_STATE (
+    ebook_no, 
+    voice_code, 
+    category, 
+    current_chapter_idx, 
+    stage, 
+    last_updated_timestamp, 
+    error_log,
+    created_timestamp,
+    rating
+)
+SELECT 
+    el.ebook_no,
+    -- Get representative voice_code from ebook_lib (use max as there may be multiple)
+    COALESCE((SELECT MAX(voice_code) FROM ebook_lib WHERE ebook_no = el.ebook_no), 0),
+    el.category,
+    -- Infer current_chapter_idx from highest section_no with any progress
+    COALESCE((SELECT MAX(section_no) FROM ebook_lib WHERE ebook_no = el.ebook_no), 0),
+    -- Map old status to new stage enum
+    CASE el.status
+        WHEN 'PARSED' THEN 'PARSED'
+        WHEN 'AUDGEN_DONE' THEN 'AUDIO_GEN'
+        WHEN 'VIDGEN_DONE' THEN 'VIDEO_GEN'
+        WHEN 'FULL_VIDEO_UPLOADED' THEN 'UPLOAD'
+        WHEN 'COMPLETE' THEN 'COMPLETE'
+        ELSE 'IDLE'
+    END as stage,
+    CURRENT_TIMESTAMP,
+    NULL as error_log,
+    CURRENT_TIMESTAMP,
+    el.no_rating as rating
+FROM ebook_list el
+WHERE NOT EXISTS (
+    -- Avoid duplicates if table already has data
+    SELECT 1 FROM PROCESSING_STATE ps 
+    WHERE ps.ebook_no = el.ebook_no 
+    AND ps.category = el.category
+);
+
+-- Log migration result
+SELECT 
+    'PHASE 1 Complete' as phase,
+    COUNT(*) as processing_state_rows_inserted
+FROM PROCESSING_STATE;
+
+-- ============================================================================
+-- PHASE 2: POPULATE CHAPTER_PROGRESS from ebook_lib
+-- Maps section data to chapter progress tracking
+-- ============================================================================
+
+INSERT INTO CHAPTER_PROGRESS (
+    ebook_no, 
+    voice_code, 
+    chapter_idx, 
+    category,
+    audio_status, 
+    audio_path, 
+    audio_generated_timestamp,
+    video_status, 
+    video_path, 
+    waveform_path, 
+    video_generated_timestamp,
+    upload_status, 
+    youtube_url, 
+    upload_generated_timestamp,
+    retry_count, 
+    next_retry_timestamp, 
+    error_message, 
+    error_type,
+    created_timestamp, 
+    last_status_change_timestamp
+)
+SELECT 
+    el.ebook_no,
+    el.voice_code,
+    el.section_no as chapter_idx,
+    -- Get category from ebook_list
+    (SELECT category FROM ebook_list WHERE ebook_no = el.ebook_no LIMIT 1) as category,
+    
+    -- Audio Status: If rel_path exists, it was generated
+    CASE 
+        WHEN el.rel_path IS NOT NULL AND LENGTH(TRIM(el.rel_path)) > 0 THEN 'COMPLETED'
+        ELSE 'NOT_STARTED'
+    END as audio_status,
+    
+    -- Audio Path: Use rel_path from ebook_lib
+    el.rel_path as audio_path,
+    
+    -- Audio Generated Timestamp: Not in old schema, use current time as approximation
+    CASE WHEN el.rel_path IS NOT NULL THEN CURRENT_TIMESTAMP ELSE NULL END as audio_generated_timestamp,
+    
+    -- Video Status: Map from vid_status field
+    'NOT_STARTED' as video_status,
+    
+    -- Video Path: Not stored in old schema, set NULL
+    NULL as video_path,
+    
+    -- Waveform Path: Not in old schema, set NULL
+    NULL as waveform_path,
+    
+    -- Video Generated Timestamp: Not in old schema
+    CASE WHEN el.vid_status = 'GENERATED' THEN CURRENT_TIMESTAMP ELSE NULL END as video_generated_timestamp,
+    
+    -- Upload Status: Not explicitly tracked in old schema
+    -- Infer from ebook_list status if FULL_VIDEO_UPLOADED
+    CASE el.vid_status
+        WHEN 'UPLOADED' THEN 'COMPLETED'
+        ELSE 'NOT_STARTED'
+    END as upload_status,
+    
+    -- YouTube URL: Not in old schema
+    NULL as youtube_url,
+    
+    -- Upload Timestamp: Not in old schema
+    NULL as upload_generated_timestamp,
+    
+    -- Retry tracking: Not in old schema, initialize to 0
+    0 as retry_count,
+    NULL as next_retry_timestamp,
+    NULL as error_message,
+    NULL as error_type,
+    
+    CURRENT_TIMESTAMP as created_timestamp,
+    CURRENT_TIMESTAMP as last_status_change_timestamp
+    
+FROM ebook_lib el
+WHERE NOT EXISTS (
+    -- Avoid duplicates
+    SELECT 1 FROM CHAPTER_PROGRESS cp 
+    WHERE cp.ebook_no = el.ebook_no 
+    AND cp.voice_code = el.voice_code 
+    AND cp.chapter_idx = el.section_no
+);
+
+-- Log migration result
+SELECT 
+    'PHASE 2 Complete' as phase,
+    COUNT(*) as chapter_progress_rows_inserted
+FROM CHAPTER_PROGRESS;
+
+-- ============================================================================
+-- PHASE 3: POPULATE SHORTS_PROGRESS
+-- Creates placeholder entries for shorts based on no_shorts count from ebook_lib
+-- Note: Detailed short metadata not in old schema - entries are scaffolds
+-- ============================================================================
+
+INSERT INTO SHORTS_PROGRESS (
+    ebook_no, 
+    voice_code, 
+    chapter_idx, 
+    short_idx, 
+    category,
+    audio_status, 
+    audio_path, 
+    audio_generated_timestamp,
+    video_status, 
+    video_path, 
+    waveform_path, 
+    video_generated_timestamp,
+    upload_status, 
+    youtube_url, 
+    youtube_shorts_url,
+    upload_generated_timestamp,
+    retry_count, 
+    next_retry_timestamp, 
+    error_message, 
+    error_type,
+    created_timestamp, 
+    last_status_change_timestamp
+)
+SELECT 
+    el.ebook_no,
+    el.voice_code,
+    el.section_no as chapter_idx,
+    -- Generate short indices (1 to no_shorts)
+    seq.short_idx,
+    -- Get category from ebook_list
+    (SELECT category FROM ebook_list WHERE ebook_no = el.ebook_no LIMIT 1) as category,
+    
+    -- For shorts, inherit audio status from chapter if it was generated
+    CASE 
+        WHEN el.no_words > 0 THEN 'COMPLETED'
+        ELSE 'NOT_STARTED'
+    END as audio_status,
+    
+    -- ADJUSTED AUDIO PATH
+    -- 1. Take rel_path and remove '_chapsection.wav'
+    -- 2. Append '_Shorts/short_'
+    -- 3. Use (seq.short_idx - 1) to start at 00
+    CASE 
+        WHEN el.no_words > 0 AND el.rel_path IS NOT NULL
+        THEN REPLACE(el.rel_path, '_chapsection.wav', '') || '_Shorts/short_' || PRINTF('%02d', seq.short_idx - 1) || '.wav'
+        ELSE NULL 
+    END as audio_path,
+    
+    -- Audio generated timestamp
+    CASE 
+        WHEN el.rel_path IS NOT NULL AND LENGTH(TRIM(el.rel_path)) > 0
+        THEN CURRENT_TIMESTAMP 
+        ELSE NULL 
+    END as audio_generated_timestamp,
+    
+    -- Video status: If chapter video was generated, shorts inherit that state
+    CASE 
+        WHEN el.vid_status = 'GENERATED' THEN 'COMPLETED'
+        ELSE 'NOT_STARTED'
+    END as video_status,
+    
+    -- Video path: Not in old schema
+    NULL as video_path,
+    
+    -- Waveform path: Not in old schema
+    NULL as waveform_path,
+    
+    -- Video timestamp
+    CASE WHEN el.vid_status = 'GENERATED' THEN CURRENT_TIMESTAMP ELSE NULL END as video_generated_timestamp,
+    
+    -- Upload status for shorts: Not tracked in old schema
+    'NOT_STARTED' as upload_status,
+    
+    -- YouTube URLs: Not in old schema
+    NULL as youtube_url,
+    NULL as youtube_shorts_url,
+    NULL as upload_generated_timestamp,
+    
+    0 as retry_count,
+    NULL as next_retry_timestamp,
+    NULL as error_message,
+    NULL as error_type,
+    
+    CURRENT_TIMESTAMP as created_timestamp,
+    CURRENT_TIMESTAMP as last_status_change_timestamp
+    
+FROM ebook_lib el
+CROSS JOIN (
+    -- Generate sequence of short indices (1 to 100 to cover most cases)
+    WITH RECURSIVE seq_gen(short_idx) AS (
+        SELECT 1
+        UNION ALL
+        SELECT short_idx + 1 FROM seq_gen WHERE short_idx < 100
+    )
+    SELECT short_idx FROM seq_gen
+) seq
+
+WHERE el.no_shorts > 0 
+AND seq.short_idx <= el.no_shorts
+AND NOT EXISTS (
+    -- Avoid duplicates
+    SELECT 1 FROM SHORTS_PROGRESS sp 
+    WHERE sp.ebook_no = el.ebook_no 
+    AND sp.voice_code = el.voice_code 
+    AND sp.chapter_idx = el.section_no 
+    AND sp.short_idx = seq.short_idx
+);
+
+-- Log migration result
+SELECT 
+    'PHASE 3 Complete' as phase,
+    COUNT(*) as shorts_progress_rows_inserted
+FROM SHORTS_PROGRESS;
+
+-- ============================================================================
+-- PHASE 4: VALIDATION QUERIES
+-- Verify migration integrity
+-- ============================================================================
+
+-- Check 1: All ebook_list entries mapped to PROCESSING_STATE
+SELECT 
+    'Migration Validation' as check_type,
+    'PROCESSING_STATE coverage' as check_name,
+    COUNT(DISTINCT el.ebook_no) as ebook_list_count,
+    COUNT(DISTINCT ps.ebook_no) as processing_state_count,
+    CASE 
+        WHEN COUNT(DISTINCT el.ebook_no) = COUNT(DISTINCT ps.ebook_no) THEN 'PASS'
+        ELSE 'FAIL - Missing entries in PROCESSING_STATE'
+    END as status
+FROM ebook_list el
+LEFT JOIN PROCESSING_STATE ps ON ps.ebook_no = el.ebook_no;
+
+-- Check 2: All ebook_lib entries mapped to CHAPTER_PROGRESS
+SELECT 
+    'Migration Validation' as check_type,
+    'CHAPTER_PROGRESS coverage' as check_name,
+    COUNT(*) as ebook_lib_count,
+    (SELECT COUNT(*) FROM CHAPTER_PROGRESS) as chapter_progress_count,
+    CASE 
+        WHEN COUNT(*) = (SELECT COUNT(*) FROM CHAPTER_PROGRESS) THEN 'PASS'
+        ELSE 'FAIL - Mismatch in row counts'
+    END as status
+FROM ebook_lib;
+
+-- Check 3: Status mapping correctness
+SELECT 
+    'Migration Validation' as check_type,
+    'Status mapping' as check_name,
+    el.status as old_status,
+    ps.stage as new_stage,
+    COUNT(*) as count,
+    CASE 
+        WHEN el.status = 'PARSED' AND ps.stage = 'PARSED' THEN 'PASS'
+        WHEN el.status = 'AUDGEN_DONE' AND ps.stage = 'AUDIO_GEN' THEN 'PASS'
+        WHEN el.status = 'VIDGEN_DONE' AND ps.stage = 'VIDEO_GEN' THEN 'PASS'
+        WHEN el.status = 'FULL_VIDEO_UPLOADED' AND ps.stage = 'UPLOAD' THEN 'PASS'
+        ELSE 'WARN - Unexpected mapping'
+    END as validation
+FROM ebook_list el
+LEFT JOIN PROCESSING_STATE ps ON ps.ebook_no = el.ebook_no
+GROUP BY el.status, ps.stage
+ORDER BY el.status;
+
+-- Check 4: Audio file tracking consistency
+SELECT 
+    'Migration Validation' as check_type,
+    'Audio file integrity' as check_name,
+    COUNT(*) as total_chapters_in_ebook_lib,
+    SUM(CASE WHEN el.rel_path IS NOT NULL THEN 1 ELSE 0 END) as chapters_with_audio_path,
+    SUM(CASE WHEN cp.audio_status = 'COMPLETED' THEN 1 ELSE 0 END) as chapters_audio_completed_in_cp,
+    CASE 
+        WHEN SUM(CASE WHEN el.rel_path IS NOT NULL THEN 1 ELSE 0 END) = 
+             SUM(CASE WHEN cp.audio_status = 'COMPLETED' THEN 1 ELSE 0 END)
+        THEN 'PASS'
+        ELSE 'FAIL - Audio status mismatch'
+    END as status
+FROM ebook_lib el
+LEFT JOIN CHAPTER_PROGRESS cp ON cp.ebook_no = el.ebook_no 
+    AND cp.voice_code = el.voice_code 
+    AND cp.chapter_idx = el.section_no;
+
+-- Check 5: Video status mapping
+SELECT 
+    'Migration Validation' as check_type,
+    'Video status mapping' as check_name,
+    el.vid_status as old_vid_status,
+    cp.video_status as new_video_status,
+    COUNT(*) as count
+FROM ebook_lib el
+LEFT JOIN CHAPTER_PROGRESS cp ON cp.ebook_no = el.ebook_no 
+    AND cp.voice_code = el.voice_code 
+    AND cp.chapter_idx = el.section_no
+GROUP BY el.vid_status, cp.video_status
+ORDER BY el.vid_status;
+
+-- Check 6: Shorts population
+SELECT 
+    'Migration Validation' as check_type,
+    'Shorts coverage' as check_name,
+    COUNT(DISTINCT ebook_lib.ebook_no) as ebooks_with_shorts,
+    SUM(ebook_lib.no_shorts) as total_shorts_expected,
+    COUNT(*) as total_shorts_created,
+    CASE 
+        WHEN SUM(ebook_lib.no_shorts) = COUNT(*) THEN 'PASS'
+        ELSE 'FAIL - Shorts count mismatch'
+    END as status
+FROM ebook_lib
+LEFT JOIN SHORTS_PROGRESS ON 
+    SHORTS_PROGRESS.ebook_no = ebook_lib.ebook_no 
+    AND SHORTS_PROGRESS.voice_code = ebook_lib.voice_code 
+    AND SHORTS_PROGRESS.chapter_idx = ebook_lib.section_no
+WHERE ebook_lib.no_shorts > 0
+GROUP BY ebook_lib.ebook_no;
+
+-- Check 7: Category consistency
+SELECT 
+    'Migration Validation' as check_type,
+    'Category mapping' as check_name,
+    COUNT(DISTINCT el.category) as ebook_list_categories,
+    COUNT(DISTINCT ps.category) as processing_state_categories,
+    COUNT(DISTINCT cp.category) as chapter_progress_categories,
+    CASE 
+        WHEN COUNT(DISTINCT el.category) = COUNT(DISTINCT ps.category) THEN 'PASS'
+        ELSE 'FAIL - Category mismatch'
+    END as status
+FROM ebook_list el
+LEFT JOIN PROCESSING_STATE ps ON ps.ebook_no = el.ebook_no
+LEFT JOIN CHAPTER_PROGRESS cp ON cp.ebook_no = el.ebook_no;
+
+-- ============================================================================
+-- PHASE 5: SUMMARY REPORT
+-- ============================================================================
+
+SELECT 
+    'Migration Summary' as report_type,
+    'PROCESSING_STATE' as table_name,
+    COUNT(*) as row_count,
+    COUNT(DISTINCT ebook_no) as unique_ebooks,
+    COUNT(DISTINCT stage) as unique_stages
+FROM PROCESSING_STATE
+UNION ALL
+SELECT 
+    'Migration Summary',
+    'CHAPTER_PROGRESS',
+    COUNT(*),
+    COUNT(DISTINCT ebook_no),
+    COUNT(DISTINCT audio_status)
+FROM CHAPTER_PROGRESS
+UNION ALL
+SELECT 
+    'Migration Summary',
+    'SHORTS_PROGRESS',
+    COUNT(*),
+    COUNT(DISTINCT ebook_no),
+    COUNT(DISTINCT short_idx)
+FROM SHORTS_PROGRESS;
+
+-- ============================================================================
+-- PHASE 6: UPDATE SCHEMA_VERSION
+-- ============================================================================
+
+INSERT OR REPLACE INTO SCHEMA_VERSION (
+    version, 
+    migration_timestamp, 
+    description, 
+    status
+) 
+VALUES (
+    2, 
+    CURRENT_TIMESTAMP, 
+    'Migrated data from ebook_lib/ebook_list to PROCESSING_STATE/CHAPTER_PROGRESS/SHORTS_PROGRESS', 
+    'COMPLETED'
+);
+
+-- ============================================================================
+-- END OF MIGRATION SCRIPT
+-- ============================================================================
+
+-- Summary of actions taken:
+-- 1. PROCESSING_STATE: One row per ebook/voice/category with aggregated state
+-- 2. CHAPTER_PROGRESS: One row per chapter with detailed audio/video/upload status
+-- 3. SHORTS_PROGRESS: One row per short with inherited status from chapter
+-- 4. All timestamps set to CURRENT_TIMESTAMP (approximation since not in old schema)
+-- 5. Retry tracking initialized to 0 (no failures tracked in old schema)
+-- 6. YouTube URLs and paths initialized to NULL (not in old schema)
+-- 7. All validations ensure data integrity and completeness
