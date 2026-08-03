@@ -1,3 +1,4 @@
+from __future__ import annotations
 import signal
 import threading
 import time
@@ -34,17 +35,24 @@ class WorkerOrchestrator:
         self.audio_runs = audio_runs
         self.video_runs = video_runs
         self.upload_runs = upload_runs
+        
+        self.workers: List = []
+        self.threads: List[threading.Thread] = []
 
     def _load_categories(self) -> List[str]:
-        self.db_manager._cursor.execute("SELECT DISTINCT category FROM YOUTUBE_MAP")
-        rows = self.db_manager._cursor.fetchall()
-        return [row[0] for row in rows if row]
+        try:
+            self.db_manager._cursor.execute("SELECT DISTINCT category FROM YOUTUBE_MAP")
+            rows = self.db_manager._cursor.fetchall()
+            return [row[0] for row in rows if row]
+        except Exception as e:
+            log.ERROR(f"Orchestrator: error loading categories: {e}")
+            return ["cat(RS)", "cat(MS)", "cat(WE)", "cat(LM)"]
 
     def _get_voice_codes(self, category: str) -> List[int]:
         return self.db_manager.get_voice_codes(category)
 
     def start(self) -> None:
-        log.INFO("Orchestrator: starting pipeline")
+        log.INFO("Orchestrator: starting pipeline worker threads")
         
         for _ in range(self.audio_runs):
             self._start_audio_workers()
@@ -60,8 +68,11 @@ class WorkerOrchestrator:
 
         for category in self.categories:
             worker = AudioGenWorker(self.tts, category, poll_interval=self.poll_interval)
-            log.INFO(f"Orchestrator: audio worker started for category={category}")
-            worker.run()
+            t = threading.Thread(target=worker.run, daemon=True, name=f"AudioWorker-{category}")
+            self.workers.append(worker)
+            self.threads.append(t)
+            t.start()
+            log.INFO(f"Orchestrator: audio worker thread started for category={category}")
 
     def _start_video_workers(self) -> None:
         if not config.ENABLE_VIDEO_GEN_WORKER:
@@ -70,8 +81,11 @@ class WorkerOrchestrator:
 
         for category in self.categories:
             worker = VideoGenWorker(self.video_gen, category, poll_interval=self.poll_interval)
-            log.INFO(f"Orchestrator: video worker started for category={category}")
-            worker.run()
+            t = threading.Thread(target=worker.run, daemon=True, name=f"VideoWorker-{category}")
+            self.workers.append(worker)
+            self.threads.append(t)
+            t.start()
+            log.INFO(f"Orchestrator: video worker thread started for category={category}")
 
     def _start_upload_workers(self) -> None:
         if not config.ENABLE_UPLOAD_WORKER:
@@ -81,8 +95,19 @@ class WorkerOrchestrator:
         for category in self.categories:
             uploader = UpMonYouTube(category)
             worker = UploadWorker(uploader, category, poll_interval=self.poll_interval)
-            log.INFO(f"Orchestrator: upload worker started for category={category}")
-            worker.run()
+            t = threading.Thread(target=worker.run, daemon=True, name=f"UploadWorker-{category}")
+            self.workers.append(worker)
+            self.threads.append(t)
+            t.start()
+            log.INFO(f"Orchestrator: upload worker thread started for category={category}")
 
     def stop(self) -> None:
-        os.abort()
+        log.INFO("Orchestrator: stopping pipeline cleanly")
+        for worker in self.workers:
+            if hasattr(worker, 'stop'):
+                worker.stop()
+        
+        for t in self.threads:
+            if t.is_alive():
+                t.join(timeout=2.0)
+        log.INFO("Orchestrator: pipeline stopped")

@@ -5,17 +5,11 @@ from typing import Optional
 from Workers.BaseWorker import BaseWorker
 import Utils.Central_Logger as log
 import Utils.Config_vars as config
-from Utils.DB_Operations import DBOps, Status
 from VideoGen.UpMonYoutube import UpMonYouTube
 
-try:
-    from googleapiclient.errors import HttpError
-except ImportError:
-    HttpError = Exception
 
-
-class UploadWorker():
-    """Worker that uploads completed chapter videos to YouTube."""
+class UploadWorker(BaseWorker):
+    """Worker that continuously consumes upload tasks."""
 
     def __init__(
         self,
@@ -23,29 +17,29 @@ class UploadWorker():
         category: str,
         poll_interval: Optional[float] = None,
     ):
+        super().__init__(worker_tag=f"UploadWorker[{category}]", poll_interval=poll_interval)
         self.uploader = uploader
-        self.worker_tag=f"UploadWorker[{category}]"
         self.category = category
 
-    def run(self) -> None:
-        log.INFO(f"{self.worker_tag}: processing upload.")
-        try:
-            upload_result = self.uploader.upload_single_video(self.category, upload_shorts=config.GENERATE_SHORTS)
+    def get_next_item(self):
+        retries = self.uploader._dbops.get_stage_retries("FULL_VIDEO_UPLOAD")
+        category_retries = [r for r in retries if len(r) >= 4 and r[3] == self.category]
+        if category_retries:
+            return ("retry", category_retries[0])
 
-            if not upload_result:
-                log.INFO(f"{self.worker_tag}: no sections available for upload")
-                return
-            log.INFO(f"{self.worker_tag}: upload completed for chapter")
+        res = self.uploader._dbops.get_next_action_category(self.category, "PROCESSING", "FULL_VIDEO_UPLOAD")
+        if res is not None:
+            return ("normal", res)
+        return None
 
-        except Exception as exc:
-            error_msg = str(exc)
-            log.ERROR(f"{self.worker_tag}: upload exception for chapter: {error_msg}")
-        
-        for _ in range(config.RETRY_MAX_ATTEMPTS):
-            self.run_retries()
-        
-        return
-            
-    def run_retries(self) -> None:
-        log.INFO(f"{self.worker_tag}: Start retry for category {self.category}")
-        self.uploader.upload_single_video_retries
+    def process_item(self, item) -> None:
+        item_type, data = item
+        if item_type == "retry":
+            log.INFO(f"{self.worker_tag}: processing upload retries for category={self.category}")
+            if hasattr(self.uploader, 'upload_chapter_retries'):
+                self.uploader.upload_chapter_retries()
+            elif hasattr(self.uploader, 'upload_single_video_retries'):
+                self.uploader.upload_single_video_retries()
+        else:
+            log.INFO(f"{self.worker_tag}: processing upload for category={self.category}")
+            self.uploader.upload_single_video(self.category, upload_shorts=config.GENERATE_SHORTS)

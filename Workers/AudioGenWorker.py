@@ -1,42 +1,43 @@
+from __future__ import annotations
 import time
-from typing import List, Optional, Tuple
+from typing import Optional
 
-import Utils.Config_vars as config
+from Workers.BaseWorker import BaseWorker
 import Utils.Central_Logger as log
-from Utils.DB_Operations import DBOps, Status
+import Utils.Config_vars as config
 from TTS.TTS import TTS
 
 
-class AudioGenWorker:
-    """Worker that generates TTS audio for one chapter at a time."""
+class AudioGenWorker(BaseWorker):
+    """Worker that continuously consumes audio generation work."""
 
-    def __init__(self, tts: TTS, category: str, poll_interval: float = 5.0):
+    def __init__(
+        self,
+        tts: TTS,
+        category: str,
+        poll_interval: Optional[float] = None,
+    ):
+        super().__init__(worker_tag=f"AudioGenWorker[{category}]", poll_interval=poll_interval)
         self.tts = tts
         self.category = category
-        self.worker_tag=f"AudioGenWorker[{category}]"
-        self.stop_requested = False
 
-    def run(self) -> None:
-        log.INFO(f"{self.worker_tag}: started for category={self.category}")
-        try:
-            self.tts.generate_chapter_audio_for_worker(
-                category=self.category,
-                use_short=config.GENERATE_SHORTS,
-            )
-        except Exception as exc:
-            log.ERROR(f"{self.worker_tag}: failed to generate audio for category={self.category} with error: {exc}")
+    def get_next_item(self):
+        retries = self.tts._dbops.get_stage_retries("AUDIO_GEN")
+        category_retries = [r for r in retries if len(r) >= 4 and r[3] == self.category]
+        if category_retries:
+            return ("retry", category_retries[0])
 
-        log.INFO(f"{self.worker_tag}: stopped for category={self.category}")
-        
-        for _ in range(config.RETRY_MAX_ATTEMPTS):
-            self.run_retries()
-            
-        return
+        content_res = self.tts.get_books_content(self.category)
+        if content_res:
+            return ("normal", content_res)
+        return None
 
-    def run_retries(self) -> None:
-        log.INFO(f"{self.worker_tag}: Start retry for category {self.category}")
-        # Run Retries 3 times and if all failures raise alert
-        self.tts.generate_chapter_audio_retries()
-        
-    def stop(self) -> None:
-        self.stop_requested = True
+    def process_item(self, item) -> None:
+        item_type, data = item
+        if item_type == "retry":
+            ebook_no, voice_code, chapter_idx, _ = data
+            log.INFO(f"{self.worker_tag}: processing retry for book={ebook_no}, chapter={chapter_idx}, voice={voice_code}")
+            self.tts.generate_chapter_audio_retries()
+        else:
+            log.INFO(f"{self.worker_tag}: processing normal audio generation for category={self.category}")
+            self.tts.generate_chapter_audio_for_worker(self.category, use_short=config.GENERATE_SHORTS)
