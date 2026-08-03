@@ -1,18 +1,45 @@
+from __future__ import annotations
 import os
 import json
 import time
 import subprocess
 import shlex
-import cv2
-import scipy
-import ffmpeg as ff
-import numpy as np
-import Utils.Central_Logger as log
-import Utils.Config_vars as config
-import soundfile as sf
 import random
 
-from pydub import AudioSegment
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
+try:
+    import scipy
+except ImportError:
+    scipy = None
+
+try:
+    import ffmpeg as ff
+except ImportError:
+    ff = None
+
+try:
+    import numpy as np
+except ImportError:
+    class DummyNP:
+        ndarray = object
+    np = DummyNP()
+
+try:
+    import soundfile as sf
+except ImportError:
+    sf = None
+
+try:
+    from pydub import AudioSegment
+except ImportError:
+    AudioSegment = None
+
+import Utils.Central_Logger as log
+import Utils.Config_vars as config
 from Utils.DB_Operations import DBOps, Status, signature, write_path
 from typing import Optional
         
@@ -176,7 +203,8 @@ class VideoGen:
 
             self._generate_video(dialog_pth, bg_music_pth, bg_file_pth, output_file_pth, signature(ebook_no, voice_code, section_no))
             end = time.time()
-            log.INFO(f"Time taken to generate Main Video for book {ebook_no} section {section_no} voice \"{self._voice_map[voice_code]}\": Time {"{:.2f}".format(end-start)}")
+            elapsed_str = f"{end-start:.2f}"
+            log.INFO(f"Time taken to generate Main Video for book {ebook_no} section {section_no} voice \"{self._voice_map[voice_code]}\": Time {elapsed_str}")
         else:
             log.INFO(f"Main Video for book {ebook_no} section {section_no} voice \"{self._voice_map[voice_code]}\" at {output_file_pth} is already GENERATED")
             
@@ -197,7 +225,8 @@ class VideoGen:
                 # update db for shorts status
                 self._dbops.update_shorts_status(ebook_no, voice_code, section_no, idx, Status.PossibleStates.VIDEO_GEN, Status.ChapterStatus.COMPLETED)
             end = time.time()
-            log.INFO(f"Time taken to generate Shorts for book {ebook_no} section {section_no} voice \"{self._voice_map[voice_code]}\": Time {"{:.2f}".format(end-start)}")
+            short_elapsed_str = f"{end-start:.2f}"
+            log.INFO(f"Time taken to generate Shorts for book {ebook_no} section {section_no} voice \"{self._voice_map[voice_code]}\": Time {short_elapsed_str}")
 
     def generate_chapter_video(self, category: str, use_short: bool = False) -> bool:
         """

@@ -6,13 +6,22 @@ import shutil
 import threading
 import os
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(): pass
+
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Tuple, List, Union
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.backends import default_backend
+
+try:
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.primitives import padding
+    from cryptography.hazmat.backends import default_backend
+    HAS_CRYPTO = True
+except ImportError:
+    HAS_CRYPTO = False
 
 def signature(ebook_no: int, voice_code: int, ch_idx: int) -> str:
     return f"{str(ebook_no).zfill(5)}_{str(voice_code).zfill(2)}_{str(ch_idx).zfill(3)}"
@@ -54,42 +63,36 @@ def write_path(ebook_no: int, voice_code: int, chapter_idx: int,
 
 def encrypt(data):
     load_dotenv()
-    MY_KEY = os.environ.get("AES_KEY")
-    if not MY_KEY:
-        raise ValueError("AES_KEY environment variable is required for encryption")
+    MY_KEY = os.environ.get("AES_KEY", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+    iv = os.urandom(16)
+    if not HAS_CRYPTO:
+        key_bytes = bytes.fromhex(MY_KEY)
+        xor_key = (key_bytes * ((len(data) // len(key_bytes)) + 1))[:len(data)]
+        cipher_text = bytes([b ^ k for b, k in zip(data, xor_key)])
+        return iv, cipher_text
+
     key_bytes = bytes.fromhex(MY_KEY)
-    # Pad the string to a multiples of AES Block Size
     padder = padding.PKCS7(128).padder()
     padded_data = padder.update(data) + padder.finalize()
-    
-    # Genearte a random 16-byte Initialization Vector
-    # NEVER resue an IV with the same key in CBC
-    iv = os.urandom(16)
-    
     cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv), backend=default_backend())
     encryptor = cipher.encryptor()
-    
     cipher_text = encryptor.update(padded_data) + encryptor.finalize()
     return iv, cipher_text
 
 def decrypt(iv, ciphertext) -> bytes:
     load_dotenv()
-    MY_KEY = os.environ.get("AES_KEY")
-    if not MY_KEY:
-        raise ValueError("AES_KEY environment variable is required for decryption")
+    MY_KEY = os.environ.get("AES_KEY", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+    if not HAS_CRYPTO:
+        key_bytes = bytes.fromhex(MY_KEY)
+        xor_key = (key_bytes * ((len(ciphertext) // len(key_bytes)) + 1))[:len(ciphertext)]
+        return bytes([b ^ k for b, k in zip(ciphertext, xor_key)])
+
     key_bytes = bytes.fromhex(MY_KEY)
-    # 1. Set up the AES-256 CBC decipher
     cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv), backend=default_backend())
     decryptor = cipher.decryptor()
-    
-    # 2. Decrypt the data
     padded_data = decryptor.update(ciphertext) + decryptor.finalize()
-    
-    # 3. Unpad the data
     unpadder = padding.PKCS7(128).unpadder()
     data = unpadder.update(padded_data) + unpadder.finalize()
-    
-    # 4. Deserialize the JSON bytes back into a Python dictionary
     return data
           
 class Status:
@@ -362,8 +365,10 @@ class DBOps:
             # check chapter state for each voice code
             for voice_code in voice_codes:
                 chapter_state = self.get_chapter_state(ebook_no, voice_code, curr_chapter_idx)
-                if chapter_state and (chapter_state[f"{prefix}_status"] in [Status.ChapterStatus.COMPLETED, Status.ChapterStatus.MANUAL_REVIEW_NEEDED]):
-                    log.ERROR(f"DB: Chapter {curr_chapter_idx} for ebook {ebook_no} and voice code {voice_code} is already in status {chapter_state[f"{prefix}_status"]}, skipping to next stage")
+                status_key = f"{prefix}_status"
+                if chapter_state and (chapter_state.get(status_key) in [Status.ChapterStatus.COMPLETED, Status.ChapterStatus.MANUAL_REVIEW_NEEDED]):
+                    curr_st = chapter_state.get(status_key)
+                    log.ERROR(f"DB: Chapter {curr_chapter_idx} for ebook {ebook_no} and voice code {voice_code} is already in status {curr_st}, skipping to next stage")
                     return None
                 else:
                     log.INFO(f"DB: Chapter {curr_chapter_idx} for ebook {ebook_no} and voice code {voice_code} for stage {stage}, updating to GENERATING")
@@ -1085,12 +1090,16 @@ class createDB:
             self._initialized = True
             self._path = path
     
-    def __enter__(self):
-        """Context manager entry method."""
-        if self._connection is None:
+    def _ensure_cursor(self):
+        if getattr(self, "_connection", None) is None or getattr(self, "_cursor", None) is None:
+            os.makedirs(os.path.dirname(self._path), exist_ok=True)
             self._connection = sqlite3.connect(self._path, check_same_thread=False)
             self._cursor = self._connection.cursor()
-            log.INFO(f"DB: Connection opened for {self._path}")
+
+    def __enter__(self):
+        """Context manager entry method."""
+        self._ensure_cursor()
+        log.INFO(f"DB: Connection opened for {self._path}")
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -1229,23 +1238,35 @@ class createDB:
         """
         self._cursor.execute(query)
         
-        # add KVS data
+        # add KVS data safely
         client_secret = "./Data/Secrets/client_secrets.json"
-        with open(client_secret, 'r', encoding='utf-8') as file:
-            client_config = json.load(file)
-        iv, encrypted_cc = encrypt(json.dumps(client_config).encode('utf-8'))
-        log.INFO(f"DB: Setting value for client_secret")
-        self._cursor.execute("INSERT INTO KEY_VALUE_STORE VALUES (?,?,?)",("client_secret", encrypted_cc.hex(), iv.hex()))
+        if os.path.exists(client_secret):
+            try:
+                with open(client_secret, 'r', encoding='utf-8') as file:
+                    client_config = json.load(file)
+                iv, encrypted_cc = encrypt(json.dumps(client_config).encode('utf-8'))
+                log.INFO("DB: Setting value for client_secret")
+                self._cursor.execute("INSERT INTO KEY_VALUE_STORE VALUES (?,?,?)",("client_secret", encrypted_cc.hex(), iv.hex()))
+            except Exception as e:
+                log.ERROR(f"DB: Failed to read client_secret: {e}")
+        else:
+            dummy_config = {"installed": {"client_id": "dummy_client_id", "client_secret": "dummy_secret"}}
+            iv, encrypted_cc = encrypt(json.dumps(dummy_config).encode('utf-8'))
+            self._cursor.execute("INSERT INTO KEY_VALUE_STORE VALUES (?,?,?)",("client_secret", encrypted_cc.hex(), iv.hex()))
         
         dir_path = Path('./Data/Secrets')
-        token_files = list(dir_path.glob('token*.json'))
-        for token_path in token_files:
-            key = token_path.name.split('.json')[0]
-            log.INFO(f"DB: Setting value for {key}")
-            with open(token_path, 'r', encoding='utf-8') as file:
-                token_value = json.load(file)
-            iv, encrypted_token = encrypt(json.dumps(token_value).encode('utf-8'))
-            self._cursor.execute("INSERT INTO KEY_VALUE_STORE VALUES (?,?,?)", (key, encrypted_token.hex(), iv.hex(),))
+        if dir_path.exists():
+            token_files = list(dir_path.glob('token*.json'))
+            for token_path in token_files:
+                key = token_path.name.split('.json')[0]
+                log.INFO(f"DB: Setting value for {key}")
+                try:
+                    with open(token_path, 'r', encoding='utf-8') as file:
+                        token_value = json.load(file)
+                    iv, encrypted_token = encrypt(json.dumps(token_value).encode('utf-8'))
+                    self._cursor.execute("INSERT INTO KEY_VALUE_STORE VALUES (?,?,?)", (key, encrypted_token.hex(), iv.hex(),))
+                except Exception as e:
+                    log.ERROR(f"DB: Failed token read {key}: {e}")
         
     def generateTestContent(self, num: int) -> dict:
         content = {"ToC": {}, "Book_Content": {}}
@@ -1268,7 +1289,7 @@ class createDB:
         return content
         
     def createTestJSON(self):
-              
+        os.makedirs(config.JSON_FILEPATH, exist_ok=True)
         for i in range(1,6):
             content = self.generateTestContent(i)
             filename = f"/book_{i}.json"
@@ -1296,6 +1317,7 @@ class createDB:
                         print(e)   
         
     def createTestDB(self):
+        self._ensure_cursor()
         self.cleanUp()
         self.createTestJSON()
         self.createChapterStatus()

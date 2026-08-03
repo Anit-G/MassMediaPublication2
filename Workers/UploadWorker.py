@@ -1,3 +1,4 @@
+from __future__ import annotations
 import time
 from typing import Optional
 
@@ -6,7 +7,11 @@ import Utils.Central_Logger as log
 import Utils.Config_vars as config
 from Utils.DB_Operations import DBOps, Status
 from VideoGen.UpMonYoutube import UpMonYouTube
-from googleapiclient.errors import HttpError
+
+try:
+    from googleapiclient.errors import HttpError
+except ImportError:
+    HttpError = Exception
 
 
 class UploadWorker():

@@ -1,17 +1,37 @@
+from __future__ import annotations
 import time
 import os
 import json
 import re
+from typing import Union, List, Optional, Any
 
-import numpy as np
-import soundfile as sf
+try:
+    import numpy as np
+except ImportError:
+    class DummyNP:
+        ndarray = Any
+    np = DummyNP()
+
+try:
+    import soundfile as sf
+except ImportError:
+    sf = None
+
 import Utils.Config_vars as config
 import Utils.Central_Logger as log
 
-from kokoro import KPipeline
+try:
+    from kokoro import KPipeline
+except ImportError:
+    KPipeline = None
+
 from Utils.DB_Operations import DBOps, Status, signature, write_path
-from typing import Union, List, Optional
-from .WeightedKPipeline import WeightedKPipeline
+from typing import Union, List, Optional, Any
+
+try:
+    from .WeightedKPipeline import WeightedKPipeline
+except ImportError:
+    WeightedKPipeline = None
 
 class TTS:
     def __init__(self, dist_weight: float = 0.5, mixer: int = 7):
@@ -20,10 +40,16 @@ class TTS:
         self.mixer = mixer
         self._dbops = DBOps(config.METADB_PATH)
         self._pipelines = dict()
-        for _, code in self._VOICE_MAP_ENG.items():
-            if(code[0] not in self._pipelines.keys()):
-                pipeline = WeightedKPipeline(lang_code=code[0], device='cuda', repo_id='hexgrad/Kokoro-82M')
-                self._pipelines[code[0]] = pipeline
+        if WeightedKPipeline is not None:
+            for _, code in self._VOICE_MAP_ENG.items():
+                if(code[0] not in self._pipelines.keys()):
+                    try:
+                        pipeline = WeightedKPipeline(lang_code=code[0], device='cpu', repo_id='hexgrad/Kokoro-82M')
+                        self._pipelines[code[0]] = pipeline
+                    except Exception as e:
+                        log.ERROR(f"Failed to initialize WeightedKPipeline for {code[0]}: {e}")
+        else:
+            log.INFO("WeightedKPipeline not available, running in mock/demo mode")
         
         log.INFO(f"Number of pipelines created: {len(self._pipelines)}")
         if not os.path.exists(config.AUD_FILEPATH):

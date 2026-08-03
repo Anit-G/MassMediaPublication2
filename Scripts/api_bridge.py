@@ -17,76 +17,130 @@ def get_db_connection():
 
 def init_tables_if_needed(conn):
     cursor = conn.cursor()
-    # Ensure ebook_list
+    # CHAPTER_PROGRESS
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS ebook_list (
-        ebook_no INTEGER PRIMARY KEY,
-        title TEXT,
-        authors TEXT,
-        language TEXT,
-        subjects TEXT,
-        category TEXT,
-        no_rating INTEGER,
-        status TEXT,
-        voice_code INTEGER
-    )
-    """)
-    # Ensure chapter_progress
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS chapter_progress (
+    CREATE TABLE IF NOT EXISTS CHAPTER_PROGRESS (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ebook_no INTEGER,
-        voice_code INTEGER,
-        chapter_idx INTEGER,
-        audio_status TEXT DEFAULT 'NOT_STARTED',
-        video_status TEXT DEFAULT 'NOT_STARTED',
-        upload_status TEXT DEFAULT 'NOT_STARTED',
+        ebook_no INTEGER NOT NULL,
+        voice_code INTEGER NOT NULL,
+        chapter_idx INTEGER NOT NULL,
+        category TEXT NOT NULL,
+        audio_status TEXT DEFAULT 'NOT_STARTED' CHECK(audio_status IN ('NOT_STARTED', 'GENERATING', 'COMPLETED', 'FAILED', 'AUDIO_ARCHIVED', 'DELETED')),
         audio_path TEXT,
+        audio_generated_timestamp DATETIME,
+        video_status TEXT DEFAULT 'NOT_STARTED' CHECK(video_status IN ('NOT_STARTED', 'GENERATING', 'COMPLETED', 'FAILED', 'VIDEO_ARCHIVED', 'DELETED')),
         video_path TEXT,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-    # Ensure shorts_progress
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS shorts_progress (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ebook_no INTEGER,
-        voice_code INTEGER,
-        chapter_idx INTEGER,
-        short_idx INTEGER,
-        audio_status TEXT DEFAULT 'NOT_STARTED',
-        video_status TEXT DEFAULT 'NOT_STARTED',
-        upload_status TEXT DEFAULT 'NOT_STARTED',
-        audio_path TEXT,
-        video_path TEXT,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-    # Ensure processing_state
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS processing_state (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ebook_no INTEGER,
-        voice_code INTEGER,
-        category TEXT,
-        stage TEXT,
-        status TEXT,
-        last_action TEXT,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-    # Ensure retries
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS retries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ebook_no INTEGER,
-        stage TEXT,
-        chapter_idx INTEGER,
+        video_generated_timestamp DATETIME,
+        waveform_path TEXT,
+        upload_status TEXT DEFAULT 'NOT_STARTED' CHECK(upload_status IN ('NOT_STARTED', 'UPLOADING', 'COMPLETED', 'FAILED', 'PAUSED_QUOTA_EXCEEDED', 'MANUAL_REVIEW_NEEDED', 'DELETED')),
+        upload_path TEXT,
+        youtube_url TEXT,
+        upload_generated_timestamp DATETIME,
         retry_count INTEGER DEFAULT 0,
-        last_error TEXT,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        next_retry_timestamp DATETIME,
+        error_message TEXT,
+        error_type TEXT DEFAULT 'UNKNOWN' CHECK(error_type IN ('TRANSIENT', 'PERMANENT', 'API_QUOTA', 'UNKNOWN')),
+        created_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_status_change_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(ebook_no, voice_code, chapter_idx, category)
     )
     """)
+    # EBOOK_METADATA
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS EBOOK_METADATA (
+        ebook_no INTEGER PRIMARY KEY,
+        source TEXT,
+        status TEXT,
+        title TEXT,
+        author TEXT,
+        language TEXT,
+        subject TEXT,
+        content_url TEXT,
+        summary TEXT,
+        failure_count INTEGER DEFAULT 0,
+        category TEXT,
+        rating REAL,
+        no_rating INTEGER
+    )
+    """)
+    # PROCESSING_STATE
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS PROCESSING_STATE (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ebook_no INTEGER NOT NULL UNIQUE,
+        category TEXT NOT NULL,
+        current_chapter_idx INTEGER DEFAULT 0,
+        stage TEXT NOT NULL CHECK(stage IN ('IDLE', 'PROCESSING', 'COMPLETE')),
+        last_updated_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        error_log TEXT,
+        created_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        rating INTEGER,
+        max_chapter_idx INTEGER DEFAULT -1,
+        UNIQUE(ebook_no, category)
+    )
+    """)
+    # SHORTS_PROGRESS
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS SHORTS_PROGRESS (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ebook_no INTEGER NOT NULL,
+        voice_code INTEGER NOT NULL,
+        chapter_idx INTEGER NOT NULL,
+        short_idx INTEGER NOT NULL,
+        category TEXT NOT NULL,
+        audio_status TEXT DEFAULT 'NOT_STARTED' CHECK(audio_status IN ('NOT_STARTED', 'GENERATING', 'COMPLETED', 'FAILED', 'AUDIO_ARCHIVED', 'DELETED')),
+        audio_path TEXT,
+        audio_generated_timestamp DATETIME,
+        video_status TEXT DEFAULT 'NOT_STARTED' CHECK(video_status IN ('NOT_STARTED', 'GENERATING', 'COMPLETED', 'FAILED', 'VIDEO_ARCHIVED', 'DELETED')),
+        video_path TEXT,
+        video_generated_timestamp DATETIME,
+        waveform_path TEXT,
+        upload_status TEXT DEFAULT 'NOT_STARTED' CHECK(upload_status IN ('NOT_STARTED', 'UPLOADING', 'COMPLETED', 'FAILED', 'PAUSED_QUOTA_EXCEEDED', 'MANUAL_REVIEW_NEEDED', 'DELETED')),
+        upload_path TEXT,
+        youtube_url TEXT,
+        youtube_shorts_url TEXT,
+        upload_generated_timestamp DATETIME,
+        retry_count INTEGER DEFAULT 0,
+        next_retry_timestamp DATETIME,
+        error_message TEXT,
+        error_type TEXT DEFAULT 'UNKNOWN' CHECK(error_type IN ('TRANSIENT', 'PERMANENT', 'API_QUOTA', 'UNKNOWN')),
+        created_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_status_change_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(ebook_no, voice_code, chapter_idx, short_idx, category)
+    )
+    """)
+    # KEY_VALUE_STORE
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS KEY_VALUE_STORE (
+        key TEXT NOT NULL PRIMARY KEY,
+        value TEXT NOT NULL,
+        cypher_key TEXT DEFAULT 'NONE'
+    )
+    """)
+    # YOUTUBE_MAP
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS YOUTUBE_MAP (
+        category_name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        yt_hash TEXT NOT NULL,
+        voice_idx TEXT NOT NULL UNIQUE
+    )
+    """)
+    
+    # Ensure initial YOUTUBE_MAP data
+    cursor.execute("SELECT COUNT(*) FROM YOUTUBE_MAP")
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany("""
+            INSERT INTO YOUTUBE_MAP (category_name, category, yt_hash, voice_idx)
+            VALUES (?, ?, ?, ?)
+        """, [
+            ('Relaxing and Soothing', 'cat(RS)', 'UCXeqq2XcvF7jjEcv35dPl8A', '3,7'),
+            ('Mystery and Suspense', 'cat(MS)', 'UCfOw-0ovjVZSE8HvaCNJJ_Q', '18,26'),
+            ('Whimsical escapism', 'cat(WE)', 'UCKpi4fdhxKbO_DWUD3FODTA', '20,23'),
+            ('Litrary Masterpieces', 'cat(LM)', 'UChDu5fX4ICAQSgdT653TGzA', '17,22'),
+            ('Thrilling and Adventurous', 'cat(TA)', 'UCGKLnKX4AF6r1Fz86BvUPEw', '15,19')
+        ])
+
     conn.commit()
 
 def cmd_status():
@@ -94,26 +148,47 @@ def cmd_status():
     init_tables_if_needed(conn)
     cursor = conn.cursor()
 
-    cursor.execute("SELECT COUNT(*) FROM ebook_list")
+    cursor.execute("SELECT COUNT(*) FROM EBOOK_METADATA")
     total_books = cursor.fetchone()[0]
 
-    cursor.execute("SELECT status, COUNT(*) FROM ebook_list GROUP BY status")
+    cursor.execute("SELECT status, COUNT(*) FROM EBOOK_METADATA GROUP BY status")
     book_status = dict(cursor.fetchall())
 
-    cursor.execute("SELECT COUNT(*) FROM chapter_progress")
+    cursor.execute("SELECT COUNT(*) FROM CHAPTER_PROGRESS")
     total_chapters = cursor.fetchone()[0]
 
-    cursor.execute("SELECT audio_status, COUNT(*) FROM chapter_progress GROUP BY audio_status")
+    cursor.execute("SELECT audio_status, COUNT(*) FROM CHAPTER_PROGRESS GROUP BY audio_status")
     chapter_audio_status = dict(cursor.fetchall())
 
-    cursor.execute("SELECT video_status, COUNT(*) FROM chapter_progress GROUP BY video_status")
+    cursor.execute("SELECT video_status, COUNT(*) FROM CHAPTER_PROGRESS GROUP BY video_status")
     chapter_video_status = dict(cursor.fetchall())
 
-    cursor.execute("SELECT COUNT(*) FROM shorts_progress")
+    cursor.execute("SELECT upload_status, COUNT(*) FROM CHAPTER_PROGRESS GROUP BY upload_status")
+    chapter_upload_status = dict(cursor.fetchall())
+
+    cursor.execute("SELECT COUNT(*) FROM SHORTS_PROGRESS")
     total_shorts = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM retries")
-    total_retries = cursor.fetchone()[0]
+    cursor.execute("SELECT audio_status, COUNT(*) FROM SHORTS_PROGRESS GROUP BY audio_status")
+    shorts_audio_status = dict(cursor.fetchall())
+
+    cursor.execute("SELECT video_status, COUNT(*) FROM SHORTS_PROGRESS GROUP BY video_status")
+    shorts_video_status = dict(cursor.fetchall())
+
+    cursor.execute("SELECT upload_status, COUNT(*) FROM SHORTS_PROGRESS GROUP BY upload_status")
+    shorts_upload_status = dict(cursor.fetchall())
+
+    cursor.execute("SELECT COALESCE(SUM(retry_count), 0) FROM CHAPTER_PROGRESS")
+    chap_retries = cursor.fetchone()[0]
+    cursor.execute("SELECT COALESCE(SUM(retry_count), 0) FROM SHORTS_PROGRESS")
+    short_retries = cursor.fetchone()[0]
+    total_retries = chap_retries + short_retries
+
+    cursor.execute("SELECT * FROM YOUTUBE_MAP")
+    youtube_channels = [dict(row) for row in cursor.fetchall()]
+
+    cursor.execute("SELECT * FROM PROCESSING_STATE")
+    processing_state = [dict(row) for row in cursor.fetchall()]
 
     conn.close()
 
@@ -124,8 +199,14 @@ def cmd_status():
         "total_chapters": total_chapters,
         "chapter_audio_status": chapter_audio_status,
         "chapter_video_status": chapter_video_status,
+        "chapter_upload_status": chapter_upload_status,
         "total_shorts": total_shorts,
+        "shorts_audio_status": shorts_audio_status,
+        "shorts_video_status": shorts_video_status,
+        "shorts_upload_status": shorts_upload_status,
         "total_retries": total_retries,
+        "youtube_channels": youtube_channels,
+        "processing_state": processing_state,
         "python_version": sys.version.split()[0],
     }
 
@@ -133,7 +214,7 @@ def cmd_tables():
     conn, _ = get_db_connection()
     init_tables_if_needed(conn)
     cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
     tables = [row[0] for row in cursor.fetchall()]
     
     result = []
@@ -160,41 +241,14 @@ def cmd_query_table(table_name, limit=50):
         return {"error": str(e)}
 
 def cmd_seed_sample():
-    conn, _ = get_db_connection()
-    init_tables_if_needed(conn)
-    cursor = conn.cursor()
-    
-    # Check if books exist
-    cursor.execute("SELECT COUNT(*) FROM ebook_list")
-    if cursor.fetchone()[0] == 0:
-        sample_books = [
-            (1001, "Alice's Adventures in Wonderland", "Lewis Carroll", "en", "Fantasy, Children", "WE", 5, "PARSED", 20),
-            (1002, "The Adventures of Sherlock Holmes", "Arthur Conan Doyle", "en", "Mystery, Detective", "MS", 5, "PARSED", 18),
-            (1003, "The Art of War", "Sun Tzu", "en", "Strategy, Philosophy", "LM", 4, "AUDGEN_DONE", 17),
-            (1004, "Meditations", "Marcus Aurelius", "en", "Philosophy, Calm", "RS", 5, "VIDGEN_DONE", 3),
-            (1005, "The Odyssey", "Homer", "en", "Epic, Adventure", "TA", 4, "FULL_VIDEO_UPLOADED", 15)
-        ]
-        cursor.executemany("""
-            INSERT OR REPLACE INTO ebook_list 
-            (ebook_no, title, authors, language, subjects, category, no_rating, status, voice_code)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, sample_books)
-
-        sample_chapters = [
-            (1001, 20, 1, 'COMPLETED', 'NOT_STARTED', 'NOT_STARTED', 'Data/AudFiles/Book_1001/01001_20_001_chapsection.wav', None),
-            (1001, 20, 2, 'GENERATING', 'NOT_STARTED', 'NOT_STARTED', None, None),
-            (1002, 18, 1, 'COMPLETED', 'COMPLETED', 'NOT_STARTED', 'Data/AudFiles/Book_1002/01002_18_001_chapsection.wav', 'Data/OutputVideos/Book_1002/01002_18_001_videosection.mp4'),
-            (1003, 17, 1, 'COMPLETED', 'COMPLETED', 'COMPLETED', 'Data/AudFiles/Book_1003/01003_17_001_chapsection.wav', 'Data/OutputVideos/Book_1003/01003_17_001_videosection.mp4'),
-        ]
-        cursor.executemany("""
-            INSERT INTO chapter_progress 
-            (ebook_no, voice_code, chapter_idx, audio_status, video_status, upload_status, audio_path, video_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, sample_chapters)
-
-        conn.commit()
-    conn.close()
-    return {"message": "Sample data seeded successfully"}
+    try:
+        from Utils.DB_Operations import createDB
+        _, db_path = get_db_connection()
+        testdb = createDB(db_path)
+        testdb.createTestDB()
+        return {"message": "Database successfully seeded with official schema tables and YouTube channels"}
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == '__main__':
     args = sys.argv[1:]
