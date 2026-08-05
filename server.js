@@ -37,6 +37,11 @@ app.get('/api/status', async (req, res) => {
   res.json(result);
 });
 
+app.get('/api/channel-status', async (req, res) => {
+  const result = await runPythonBridge(['channel_status']);
+  res.json(result);
+});
+
 app.get('/api/db/tables', async (req, res) => {
   const result = await runPythonBridge(['tables']);
   res.json(result);

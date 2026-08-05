@@ -48,6 +48,42 @@ interface Channel {
   channelId: string;
 }
 
+interface StageCounts {
+  pending: number;
+  in_progress: number;
+  completed: number;
+  failed: number;
+}
+
+interface PendingItem {
+  ebook_no: number;
+  title: string;
+  chapter_idx: number;
+  voice_code: number;
+  current_stage: 'audio' | 'video' | 'upload';
+  stage_status: string;
+  audio_status: string;
+  video_status: string;
+  upload_status: string;
+}
+
+interface ChannelStatusData {
+  code: string;
+  name: string;
+  tag: string;
+  category: string;
+  category_code: string;
+  voiceCodes: number[];
+  channelId: string;
+  watermark?: string;
+  banner?: string;
+  total_chapters: number;
+  audio_stage: StageCounts;
+  video_stage: StageCounts;
+  upload_stage: StageCounts;
+  pending_items: PendingItem[];
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'pipeline' | 'database' | 'channels' | 'architecture'>('pipeline');
   const [status, setStatus] = useState<PipelineStatus | null>(null);
@@ -55,6 +91,7 @@ export default function App() {
   const [selectedTable, setSelectedTable] = useState<string>('ebook_list');
   const [tableData, setTableData] = useState<TableData | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [channelStatuses, setChannelStatuses] = useState<ChannelStatusData[]>([]);
   
   // Job logs state
   const [isRunning, setIsRunning] = useState(false);
@@ -75,10 +112,25 @@ export default function App() {
       if (Array.isArray(tablesData)) {
         setTables(tablesData);
       }
+
+      await fetchChannelStatus();
     } catch (err) {
       console.error('Failed to fetch pipeline status:', err);
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  // Fetch channel pipeline status
+  const fetchChannelStatus = async () => {
+    try {
+      const res = await fetch('/api/channel-status');
+      const data = await res.json();
+      if (data.channels && Array.isArray(data.channels)) {
+        setChannelStatuses(data.channels);
+      }
+    } catch (err) {
+      console.error('Failed to fetch channel pipeline status:', err);
     }
   };
 
@@ -106,10 +158,11 @@ export default function App() {
     }
   };
 
-  // Poll job logs
+  // Poll job logs and status
   useEffect(() => {
     fetchStatus();
     fetchChannels();
+    fetchChannelStatus();
 
     const interval = setInterval(async () => {
       try {
@@ -122,6 +175,8 @@ export default function App() {
       } catch (e) {
         // ignore poll errors
       }
+      fetchStatus();
+      fetchChannelStatus();
     }, 2000);
 
     return () => clearInterval(interval);
@@ -518,43 +573,201 @@ export default function App() {
 
         {activeTab === 'channels' && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                <Tv className="w-5 h-5 text-indigo-400" /> YouTube Channels & Voice Specs
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Configured YouTube publishing channels, categories, and Kokoro voice mappings.
-              </p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                  <Tv className="w-5 h-5 text-indigo-400" /> Channel Pipeline Observability Dashboard
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Real-time stage counts (TTS/Audio, Video Gen, Upload) and pending non-finished chapter queues for each publishing channel.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchChannelStatus}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg flex items-center gap-1.5 transition"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Pipeline
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {channels.map((ch) => (
-                <div key={ch.code} className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="px-2 py-0.5 bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 rounded text-[10px] font-mono font-bold">
-                        {ch.code}
-                      </span>
-                      <h3 className="text-base font-bold text-slate-100 mt-1">{ch.name}</h3>
-                      <p className="text-xs text-indigo-400 font-mono">{ch.tag}</p>
-                    </div>
-                    <span className="text-xs text-slate-400 bg-slate-950 px-2.5 py-1 rounded-full border border-slate-800">
-                      {ch.category}
-                    </span>
-                  </div>
+            {/* Channels Grid */}
+            <div className="space-y-6">
+              {(channelStatuses.length > 0 ? channelStatuses : channels).map((chAny) => {
+                const ch = chAny as ChannelStatusData;
+                const audioStage = ch.audio_stage || { pending: 0, in_progress: 0, completed: 0, failed: 0 };
+                const videoStage = ch.video_stage || { pending: 0, in_progress: 0, completed: 0, failed: 0 };
+                const uploadStage = ch.upload_stage || { pending: 0, in_progress: 0, completed: 0, failed: 0 };
+                const pendingItems = ch.pending_items || [];
 
-                  <div className="border-t border-slate-800/80 pt-3 flex items-center justify-between text-xs font-mono text-slate-400">
-                    <div>
-                      <span className="text-slate-500">Voice Codes: </span>
-                      <span className="text-slate-200">[{ch.voiceCodes.join(', ')}]</span>
+                return (
+                  <div key={ch.code} className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+                    {/* Channel Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                      <div className="flex items-center gap-3">
+                        <span className="px-2.5 py-1 bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 rounded-md text-xs font-mono font-bold">
+                          {ch.code}
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-base font-bold text-slate-100">{ch.name}</h3>
+                            <span className="text-xs text-indigo-400 font-mono">{ch.tag}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">{ch.category}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-slate-400">
+                        <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-300">
+                          Voices: [{ch.voiceCodes?.join(', ') || 'N/A'}]
+                        </span>
+                        <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-300">
+                          Total Chapters: {ch.total_chapters || 0}
+                        </span>
+                        <span className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-400 truncate max-w-[160px]" title={ch.channelId}>
+                          ID: {ch.channelId?.substring(0, 8)}...
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-slate-500">Channel ID: </span>
-                      <span className="text-slate-300">{ch.channelId.substring(0, 10)}...</span>
+
+                    {/* Three Stage Boxes Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {/* Audio / TTS Stage Box */}
+                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-3.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 font-mono">
+                            <Mic className="w-3.5 h-3.5 text-indigo-400" /> 1. TTS / Audio Gen
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-400">
+                            Stage 1
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1 text-center font-mono text-[11px] pt-1">
+                          <div className="bg-slate-900 p-1.5 rounded">
+                            <div className="text-slate-400 text-[10px]">PENDING</div>
+                            <div className="font-bold text-slate-200 mt-0.5">{audioStage.pending}</div>
+                          </div>
+                          <div className="bg-amber-950/40 border border-amber-800/40 p-1.5 rounded">
+                            <div className="text-amber-400 text-[10px]">RUNNING</div>
+                            <div className="font-bold text-amber-300 mt-0.5">{audioStage.in_progress}</div>
+                          </div>
+                          <div className="bg-emerald-950/40 border border-emerald-800/40 p-1.5 rounded">
+                            <div className="text-emerald-400 text-[10px]">DONE</div>
+                            <div className="font-bold text-emerald-300 mt-0.5">{audioStage.completed}</div>
+                          </div>
+                          <div className="bg-rose-950/40 border border-rose-800/40 p-1.5 rounded">
+                            <div className="text-rose-400 text-[10px]">FAILED</div>
+                            <div className="font-bold text-rose-300 mt-0.5">{audioStage.failed}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Video Gen Stage Box */}
+                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-3.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5 font-mono">
+                            <Video className="w-3.5 h-3.5 text-purple-400" /> 2. Video Gen
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-400">
+                            Stage 2
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1 text-center font-mono text-[11px] pt-1">
+                          <div className="bg-slate-900 p-1.5 rounded">
+                            <div className="text-slate-400 text-[10px]">PENDING</div>
+                            <div className="font-bold text-slate-200 mt-0.5">{videoStage.pending}</div>
+                          </div>
+                          <div className="bg-amber-950/40 border border-amber-800/40 p-1.5 rounded">
+                            <div className="text-amber-400 text-[10px]">RUNNING</div>
+                            <div className="font-bold text-amber-300 mt-0.5">{videoStage.in_progress}</div>
+                          </div>
+                          <div className="bg-emerald-950/40 border border-emerald-800/40 p-1.5 rounded">
+                            <div className="text-emerald-400 text-[10px]">DONE</div>
+                            <div className="font-bold text-emerald-300 mt-0.5">{videoStage.completed}</div>
+                          </div>
+                          <div className="bg-rose-950/40 border border-rose-800/40 p-1.5 rounded">
+                            <div className="text-rose-400 text-[10px]">FAILED</div>
+                            <div className="font-bold text-rose-300 mt-0.5">{videoStage.failed}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Upload Stage Box */}
+                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-3.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-blue-300 flex items-center gap-1.5 font-mono">
+                            <UploadCloud className="w-3.5 h-3.5 text-blue-400" /> 3. YouTube Upload
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-400">
+                            Stage 3
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1 text-center font-mono text-[11px] pt-1">
+                          <div className="bg-slate-900 p-1.5 rounded">
+                            <div className="text-slate-400 text-[10px]">PENDING</div>
+                            <div className="font-bold text-slate-200 mt-0.5">{uploadStage.pending}</div>
+                          </div>
+                          <div className="bg-amber-950/40 border border-amber-800/40 p-1.5 rounded">
+                            <div className="text-amber-400 text-[10px]">RUNNING</div>
+                            <div className="font-bold text-amber-300 mt-0.5">{uploadStage.in_progress}</div>
+                          </div>
+                          <div className="bg-emerald-950/40 border border-emerald-800/40 p-1.5 rounded">
+                            <div className="text-emerald-400 text-[10px]">DONE</div>
+                            <div className="font-bold text-emerald-300 mt-0.5">{uploadStage.completed}</div>
+                          </div>
+                          <div className="bg-rose-950/40 border border-rose-800/40 p-1.5 rounded">
+                            <div className="text-rose-400 text-[10px]">FAILED</div>
+                            <div className="font-bold text-rose-300 mt-0.5">{uploadStage.failed}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Pending Chapters / Books Queue */}
+                    <div className="bg-slate-950/50 border border-slate-800/60 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-amber-400" /> Pending / Non-Finished Chapter Queue
+                        </h4>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {pendingItems.length} active chapter{pendingItems.length === 1 ? '' : 's'}
+                        </span>
+                      </div>
+
+                      {pendingItems.length === 0 ? (
+                        <div className="text-xs text-slate-500 py-2 italic font-mono flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 inline" /> All chapters are completed or no jobs queued for this channel.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-800/60">
+                          {pendingItems.map((item, idx) => (
+                            <div key={idx} className="py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-500 text-[10px]">#{item.ebook_no}</span>
+                                <span className="font-medium text-slate-200 truncate max-w-xs">{item.title}</span>
+                                <span className="text-slate-400 text-[11px]">(Ch {item.chapter_idx}, Voice {item.voice_code})</span>
+                              </div>
+
+                              <div className="flex items-center gap-2 text-[11px]">
+                                <span className="text-slate-500">Stage:</span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  item.current_stage === 'audio' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' :
+                                  item.current_stage === 'video' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' :
+                                  'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                }`}>
+                                  {item.current_stage.toUpperCase()} ({item.stage_status})
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

@@ -242,13 +242,223 @@ def cmd_query_table(table_name, limit=50):
 
 def cmd_seed_sample():
     try:
-        from Utils.DB_Operations import createDB
-        _, db_path = get_db_connection()
-        testdb = createDB(db_path)
-        testdb.createTestDB()
-        return {"message": "Database successfully seeded with official schema tables and YouTube channels"}
+        conn, db_path = get_db_connection()
+        init_tables_if_needed(conn)
+        cursor = conn.cursor()
+
+        # Seed sample EBOOK_METADATA
+        cursor.execute("DELETE FROM EBOOK_METADATA")
+        cursor.executemany("""
+            INSERT OR REPLACE INTO EBOOK_METADATA (ebook_no, source, status, title, author, language, subject, content_url, summary, failure_count, category, rating, no_rating)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, [
+            (1, 'https://www.gutenberg.org/ebooks/1', 'PARSED', 'Alice in Wonderland', 'Lewis Carroll', 'English', 'Fantasy', 'https://www.gutenberg.org/cache/epub/1/pg1-images.html', 'A tale of wonder.', 0, 'cat(WE)', 4.8, 150),
+            (2, 'https://www.gutenberg.org/ebooks/2', 'PARSED', 'The Adventures of Sherlock Holmes', 'Arthur Conan Doyle', 'English', 'Mystery', 'https://www.gutenberg.org/cache/epub/2/pg2-images.html', 'Famous detective stories.', 0, 'cat(MS)', 4.9, 210),
+            (3, 'https://www.gutenberg.org/ebooks/3', 'PARSED', 'The Lullaby & Sleep Collection', 'Various Authors', 'English', 'Relaxation', 'https://www.gutenberg.org/cache/epub/3/pg3-images.html', 'Calming sleep tales.', 0, 'cat(RS)', 4.7, 95),
+            (4, 'https://www.gutenberg.org/ebooks/4', 'PARSED', 'Pride and Prejudice', 'Jane Austen', 'English', 'Classic Literature', 'https://www.gutenberg.org/cache/epub/4/pg4-images.html', 'Classic romance and social satire.', 0, 'cat(LM)', 4.9, 300),
+            (5, 'https://www.gutenberg.org/ebooks/5', 'PARSED', 'Treasure Island', 'Robert Louis Stevenson', 'English', 'Adventure', 'https://www.gutenberg.org/cache/epub/5/pg5-images.html', 'Pirates and treasure hunt.', 0, 'cat(TA)', 4.8, 180)
+        ])
+
+        # Seed sample PROCESSING_STATE
+        cursor.execute("DELETE FROM PROCESSING_STATE")
+        cursor.executemany("""
+            INSERT OR REPLACE INTO PROCESSING_STATE (id, ebook_no, category, current_chapter_idx, stage, rating, max_chapter_idx)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, [
+            (1, 1, 'cat(WE)', 1, 'PROCESSING', 4.8, 3),
+            (2, 2, 'cat(MS)', 0, 'PROCESSING', 4.9, 3),
+            (3, 3, 'cat(RS)', 2, 'PROCESSING', 4.7, 3),
+            (4, 4, 'cat(LM)', 1, 'PROCESSING', 4.9, 3),
+            (5, 5, 'cat(TA)', 0, 'IDLE', 4.8, 3)
+        ])
+
+        # Seed sample CHAPTER_PROGRESS
+        cursor.execute("DELETE FROM CHAPTER_PROGRESS")
+        cursor.executemany("""
+            INSERT OR REPLACE INTO CHAPTER_PROGRESS (ebook_no, voice_code, chapter_idx, category, audio_status, video_status, upload_status, youtube_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, [
+            # WE (MoonBerry Echoes - Voice 20)
+            (1, 20, 0, 'cat(WE)', 'COMPLETED', 'COMPLETED', 'NOT_STARTED', None),
+            (1, 20, 1, 'cat(WE)', 'GENERATING', 'NOT_STARTED', 'NOT_STARTED', None),
+            (1, 20, 2, 'cat(WE)', 'NOT_STARTED', 'NOT_STARTED', 'NOT_STARTED', None),
+
+            # MS (Erebus Echoes - Voice 18)
+            (2, 18, 0, 'cat(MS)', 'COMPLETED', 'GENERATING', 'NOT_STARTED', None),
+            (2, 18, 1, 'cat(MS)', 'NOT_STARTED', 'NOT_STARTED', 'NOT_STARTED', None),
+
+            # RS (Echo's Slumber - Voice 3)
+            (3, 3, 0, 'cat(RS)', 'COMPLETED', 'COMPLETED', 'COMPLETED', 'https://youtube.com/watch?v=sample123'),
+            (3, 3, 1, 'cat(RS)', 'COMPLETED', 'COMPLETED', 'UPLOADING', None),
+
+            # LM (Marrow & Manuscripts - Voice 17)
+            (4, 17, 0, 'cat(LM)', 'COMPLETED', 'NOT_STARTED', 'NOT_STARTED', None),
+
+            # TA (Orpheus Odes - Voice 15)
+            (5, 15, 0, 'cat(TA)', 'NOT_STARTED', 'NOT_STARTED', 'NOT_STARTED', None)
+        ])
+
+        conn.commit()
+        conn.close()
+        return {"message": "Database successfully seeded with official schema tables and pipeline chapter progress"}
     except Exception as e:
         return {"error": str(e)}
+
+def cmd_channel_status():
+    conn, _ = get_db_connection()
+    init_tables_if_needed(conn)
+    cursor = conn.cursor()
+
+    static_channels = [
+        {
+            'code': 'RS',
+            'name': "Echo's Slumber",
+            'tag': '@EchoSlumber',
+            'category': 'Relaxing and Soothing',
+            'category_code': 'cat(RS)',
+            'voiceCodes': [3, 7],
+            'channelId': 'UCXeqq2XcvF7jjEcv35dPl8A',
+            'watermark': '/Data/Channel Specs/erbuesechoes channel watermark.png'
+        },
+        {
+            'code': 'MS',
+            'name': 'Erebus Echoes',
+            'tag': '@ErebosEchoes',
+            'category': 'Mystery and Suspense',
+            'category_code': 'cat(MS)',
+            'voiceCodes': [18, 26],
+            'channelId': 'UCfOw-0ovjVZSE8HvaCNJJ_Q',
+            'watermark': '/Data/Channel Specs/marrormanuscripts channel watermark.png'
+        },
+        {
+            'code': 'WE',
+            'name': 'MoonBerry Echoes',
+            'tag': '@MoonBerryEchoes',
+            'category': 'Whimsical Escapism',
+            'category_code': 'cat(WE)',
+            'voiceCodes': [20, 23],
+            'channelId': 'UCKpi4fdhxKbO_DWUD3FODTA',
+            'watermark': '/Data/Channel Specs/moonberryechoes channel watermark.png'
+        },
+        {
+            'code': 'LM',
+            'name': 'Marrow & Manuscripts',
+            'tag': '@MarrowManuscripts',
+            'category': 'Literary Masterpieces',
+            'category_code': 'cat(LM)',
+            'voiceCodes': [17, 22],
+            'channelId': 'UChDu5fX4ICAQSgdT653TGzA',
+            'watermark': '/Data/Channel Specs/orpheusodes channel watermark.png'
+        },
+        {
+            'code': 'TA',
+            'name': 'Orpheus Odes',
+            'tag': '@OrpheusOdes',
+            'category': 'Thrilling and Adventurous',
+            'category_code': 'cat(TA)',
+            'voiceCodes': [15, 19],
+            'channelId': 'UCGKLnKX4AF6r1Fz86BvUPEw',
+            'banner': '/Data/Channel Specs/erebusechoes channel banner.jpg'
+        }
+    ]
+
+    try:
+        cursor.execute("""
+            SELECT cp.*, em.title as book_title
+            FROM CHAPTER_PROGRESS cp
+            LEFT JOIN EBOOK_METADATA em ON cp.ebook_no = em.ebook_no
+        """)
+        all_chapters = [dict(r) for r in cursor.fetchall()]
+    except Exception:
+        all_chapters = []
+
+    result_channels = []
+
+    for ch in static_channels:
+        v_codes = set(ch['voiceCodes'])
+        cat_code = ch['category_code']
+        cat_name = ch['category']
+        ch_code = ch['code']
+
+        ch_rows = []
+        for r in all_chapters:
+            r_cat = str(r.get('category') or '')
+            r_vc = r.get('voice_code')
+            if r_cat in (cat_code, cat_name, ch_code) or (r_vc is not None and int(r_vc) in v_codes):
+                ch_rows.append(r)
+
+        audio_counts = {'pending': 0, 'in_progress': 0, 'completed': 0, 'failed': 0}
+        video_counts = {'pending': 0, 'in_progress': 0, 'completed': 0, 'failed': 0}
+        upload_counts = {'pending': 0, 'in_progress': 0, 'completed': 0, 'failed': 0}
+
+        pending_items = []
+
+        for r in ch_rows:
+            a_stat = r.get('audio_status') or 'NOT_STARTED'
+            v_stat = r.get('video_status') or 'NOT_STARTED'
+            u_stat = r.get('upload_status') or 'NOT_STARTED'
+
+            if a_stat == 'COMPLETED':
+                audio_counts['completed'] += 1
+            elif a_stat in ('GENERATING', 'PROCESSING'):
+                audio_counts['in_progress'] += 1
+            elif a_stat == 'FAILED':
+                audio_counts['failed'] += 1
+            else:
+                audio_counts['pending'] += 1
+
+            if v_stat == 'COMPLETED':
+                video_counts['completed'] += 1
+            elif v_stat in ('GENERATING', 'PROCESSING'):
+                video_counts['in_progress'] += 1
+            elif v_stat == 'FAILED':
+                video_counts['failed'] += 1
+            else:
+                video_counts['pending'] += 1
+
+            if u_stat == 'COMPLETED':
+                upload_counts['completed'] += 1
+            elif u_stat in ('UPLOADING', 'PROCESSING', 'GENERATING'):
+                upload_counts['in_progress'] += 1
+            elif u_stat in ('FAILED', 'MANUAL_REVIEW_NEEDED', 'PAUSED_QUOTA_EXCEEDED'):
+                upload_counts['failed'] += 1
+            else:
+                upload_counts['pending'] += 1
+
+            if u_stat != 'COMPLETED':
+                if a_stat != 'COMPLETED':
+                    current_stage = 'audio'
+                    stage_status = a_stat
+                elif v_stat != 'COMPLETED':
+                    current_stage = 'video'
+                    stage_status = v_stat
+                else:
+                    current_stage = 'upload'
+                    stage_status = u_stat
+
+                pending_items.append({
+                    'ebook_no': r.get('ebook_no'),
+                    'title': r.get('book_title') or f"Ebook #{r.get('ebook_no')}",
+                    'chapter_idx': r.get('chapter_idx'),
+                    'voice_code': r.get('voice_code'),
+                    'current_stage': current_stage,
+                    'stage_status': stage_status,
+                    'audio_status': a_stat,
+                    'video_status': v_stat,
+                    'upload_status': u_stat
+                })
+
+        ch_data = dict(ch)
+        ch_data['total_chapters'] = len(ch_rows)
+        ch_data['audio_stage'] = audio_counts
+        ch_data['video_stage'] = video_counts
+        ch_data['upload_stage'] = upload_counts
+        ch_data['pending_items'] = pending_items
+
+        result_channels.append(ch_data)
+
+    conn.close()
+    return {"channels": result_channels}
 
 if __name__ == '__main__':
     args = sys.argv[1:]
@@ -259,6 +469,8 @@ if __name__ == '__main__':
     cmd = args[0]
     if cmd == 'status':
         print(json.dumps(cmd_status()))
+    elif cmd == 'channel_status':
+        print(json.dumps(cmd_channel_status()))
     elif cmd == 'tables':
         print(json.dumps(cmd_tables()))
     elif cmd == 'table' and len(args) > 1:
