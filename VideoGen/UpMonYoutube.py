@@ -354,10 +354,10 @@ class UpMonYouTube:
         ebook_no, chapter_idx = res
         for voice_code in voice_codes:
             video_path = self._dbops.can_start_upload(ebook_no, voice_code, chapter_idx)
-            if video_path is None:
-                return False
-            # Update db status in CS  table
-            self._dbops.update_chapter_status(ebook_no,voice_code,chapter_idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.UPLOADING)
+            if not video_path:
+                continue
+            # Update db status in CS table
+            self._dbops.update_chapter_status(ebook_no, voice_code, chapter_idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.UPLOADING)
             metadata = self.get_video_metadata(ebook_no, voice_code, chapter_idx)
             main_vid_res = ""
             try:
@@ -370,53 +370,78 @@ class UpMonYouTube:
                 )
                 if main_vid_res is None:
                     log.ERROR(f"Upload[{ebook_no}:{voice_code}:{chapter_idx}]: Failed to upload main video.")
-                    return False
-                log.INFO(f"Upload[{ebook_no}:{voice_code}:{chapter_idx}]: Responce {main_vid_res}")
+                    self._dbops.mark_chapter_retry(ebook_no, voice_code, chapter_idx, 
+                        Status.PossibleStates.UPLOAD, "Upload call returned None", 
+                        base_delay=config.RETRY_BASE_DELAY_SECONDS,
+                        backoff_factor=config.RETRY_BACKOFF_FACTOR,
+                        max_retries=config.RETRY_MAX_ATTEMPTS)
+                    continue
+                log.INFO(f"Upload[{ebook_no}:{voice_code}:{chapter_idx}]: Response {main_vid_res}")
                 main_video_url = self._build_youtube_url(main_vid_res, False)
-                self._dbops.update_chapter_status(ebook_no,voice_code,chapter_idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.COMPLETED, youtube_url=main_video_url)
+                self._dbops.update_chapter_status(ebook_no, voice_code, chapter_idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.COMPLETED, youtube_url=main_video_url)
             except Exception as exc:
                 log.ERROR(f"Upload[{ebook_no}:{voice_code}:{chapter_idx}]: Error uploading the video code {exc}")   
                 self._dbops.mark_chapter_retry(ebook_no, voice_code, chapter_idx, 
                     Status.PossibleStates.UPLOAD, str(exc), 
                     base_delay=config.RETRY_BASE_DELAY_SECONDS,
                     backoff_factor=config.RETRY_BACKOFF_FACTOR,
-                    max_retries=config.RETRY_MAX_ATTEMPTS,)       
+                    max_retries=config.RETRY_MAX_ATTEMPTS)
+                continue
                
             if upload_shorts:
                 shorts_video_paths = self._dbops.can_start_shorts_upload(ebook_no, voice_code, chapter_idx)
-                if shorts_video_paths == []:
-                    return False
-
                 for idx, short_video_file_path in shorts_video_paths:
-                    self._dbops.update_shorts_status(ebook_no, voice_code, chapter_idx, idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.UPLOADING)
-                    short_metadata = self.get_video_metadata(ebook_no, voice_code, chapter_idx, use_short=True, short_idx=idx)
-                    short_vid_res = self._upload_video_call(
-                        short_video_file_path,
-                        short_metadata["title"],
-                        short_metadata["description"],
-                        tags=short_metadata["tags"],
-                    )
-                    if short_vid_res is None:
-                        log.ERROR(f"Upload[{ebook_no}:{voice_code}:{chapter_idx}]: Failed to upload shorts for ebook.")
-                        return False
-                    log.INFO(f"Upload[{ebook_no}:{voice_code}:{chapter_idx}]: Uploading shorts video #{idx+1}, Responce {short_vid_res}")
-                    shorts_vid_url = self._build_youtube_url(short_vid_res, True)
-                    self._dbops.update_shorts_status(ebook_no,voice_code,chapter_idx,idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.COMPLETED, youtube_url=shorts_vid_url)
-        
-        # Update Processing State
-        self._dbops.update_processing_state(ebook_no, category, Status.ProcessingStage.PROCESSING ,chapter_idx+1)
+                    try:
+                        self._dbops.update_shorts_status(ebook_no, voice_code, chapter_idx, idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.UPLOADING)
+                        short_metadata = self.get_video_metadata(ebook_no, voice_code, chapter_idx, use_short=True, short_idx=idx)
+                        short_vid_res = self._upload_video_call(
+                            short_video_file_path,
+                            short_metadata["title"],
+                            short_metadata["description"],
+                            tags=short_metadata["tags"],
+                        )
+                        if short_vid_res is None:
+                            log.ERROR(f"Upload[{ebook_no}:{voice_code}:{chapter_idx}]: Failed to upload shorts for ebook.")
+                            self._dbops.mark_short_retry(ebook_no, voice_code, chapter_idx, idx, Status.PossibleStates.UPLOAD, "Short upload returned None")
+                            continue
+                        log.INFO(f"Upload[{ebook_no}:{voice_code}:{chapter_idx}]: Uploading shorts video #{idx+1}, Response {short_vid_res}")
+                        shorts_vid_url = self._build_youtube_url(short_vid_res, True)
+                        self._dbops.update_shorts_status(ebook_no, voice_code, chapter_idx, idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.COMPLETED, youtube_url=shorts_vid_url)
+                    except Exception as exc:
+                        log.ERROR(f"Upload[{ebook_no}:{voice_code}:{chapter_idx}]: Error uploading short #{idx}: {exc}")
+                        self._dbops.mark_short_retry(ebook_no, voice_code, chapter_idx, idx, Status.PossibleStates.UPLOAD, str(exc))
+
+        # Check if all voices for this chapter are done with upload
+        all_voices_done = True
+        for vc in voice_codes:
+            st = self._dbops.get_chapter_state(ebook_no, vc, chapter_idx)
+            if not st or st.get('upload_status') not in [Status.ChapterStatus.COMPLETED, Status.ChapterStatus.MANUAL_REVIEW_NEEDED]:
+                all_voices_done = False
+                break
+
+        if all_voices_done:
+            self._dbops._cursor.execute("SELECT max_chapter_idx FROM PROCESSING_STATE WHERE ebook_no = ?", (ebook_no,))
+            max_row = self._dbops._cursor.fetchone()
+            max_chapter_idx = max_row[0] if max_row else -1
+
+            log.INFO(f"Upload[{ebook_no}]: All voices for chapter {chapter_idx} finished upload. Advancing processing state.")
+            if max_chapter_idx > 0 and chapter_idx + 1 >= max_chapter_idx:
+                self._dbops.update_processing_state(ebook_no, category, Status.ProcessingStage.COMPLETE, max_chapter_idx)
+            else:
+                self._dbops.update_processing_state(ebook_no, category, Status.ProcessingStage.PROCESSING, chapter_idx + 1)
         return True
 
     def upload_single_video_retries(self) -> None:
         upload_chapter_list = self._dbops.get_stage_retries(Status.PossibleStates.UPLOAD)
         for ebook_no, voice_code, chapter_idx, category in upload_chapter_list:
+            if category != self.category:
+                continue
             try:
-                self._dbops.update_chapter_status(ebook_no,voice_code,chapter_idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.UPLOADING)
                 video_path = self._dbops.can_start_upload(ebook_no, voice_code, chapter_idx)
-                if video_path is None:
+                if not video_path:
                     continue
+                self._dbops.update_chapter_status(ebook_no, voice_code, chapter_idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.UPLOADING)
                 metadata = self.get_video_metadata(ebook_no, voice_code, chapter_idx)
-                main_vid_res = ""
                 main_vid_res = self._upload_video_call(
                     video_path,
                     metadata["title"],
@@ -426,13 +451,10 @@ class UpMonYouTube:
                 )
                 if main_vid_res is None:
                     log.ERROR(f"Upload[{ebook_no}:{voice_code}:{chapter_idx}]: Failed to upload video for retry")
+                    self._dbops.mark_chapter_retry(ebook_no, voice_code, chapter_idx, Status.PossibleStates.UPLOAD, "Retry upload call returned None")
                     continue
                 main_video_url = self._build_youtube_url(main_vid_res, False)
-                self._dbops.update_chapter_status(ebook_no,voice_code,chapter_idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.COMPLETED, youtube_url=main_video_url)
+                self._dbops.update_chapter_status(ebook_no, voice_code, chapter_idx, Status.PossibleStates.UPLOAD, Status.ChapterStatus.COMPLETED, youtube_url=main_video_url)
             except Exception as exc:
-                log.ERROR(f"Upload[{ebook_no}:{voice_code}:{chapter_idx}]: Error uploading retry the video code {exc}")   
-                self._dbops.mark_chapter_retry(ebook_no, voice_code, chapter_idx, 
-                    Status.PossibleStates.UPLOAD, str(exc), 
-                    base_delay=config.RETRY_BASE_DELAY_SECONDS,
-                    backoff_factor=config.RETRY_BACKOFF_FACTOR,
-                    max_retries=config.RETRY_MAX_ATTEMPTS,) 
+                log.ERROR(f"Upload Retry[{ebook_no}:{voice_code}:{chapter_idx}]: Retry failed: {exc}")
+                self._dbops.mark_chapter_retry(ebook_no, voice_code, chapter_idx, Status.PossibleStates.UPLOAD, str(exc)) 

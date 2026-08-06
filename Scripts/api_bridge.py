@@ -445,8 +445,17 @@ def cmd_channel_status():
                     'stage_status': stage_status,
                     'audio_status': a_stat,
                     'video_status': v_stat,
-                    'upload_status': u_stat
+                    'upload_status': u_stat,
+                    'retry_count': r.get('retry_count') or 0,
+                    'next_retry_timestamp': r.get('next_retry_timestamp'),
+                    'error_message': r.get('error_message')
                 })
+
+        stuck_items = [
+            item for item in pending_items
+            if item['stage_status'] in ('MANUAL_REVIEW_NEEDED', 'FAILED', 'PAUSED_QUOTA_EXCEEDED')
+            or (item['retry_count'] and item['retry_count'] > 0)
+        ]
 
         ch_data = dict(ch)
         ch_data['total_chapters'] = len(ch_rows)
@@ -454,11 +463,25 @@ def cmd_channel_status():
         ch_data['video_stage'] = video_counts
         ch_data['upload_stage'] = upload_counts
         ch_data['pending_items'] = pending_items
+        ch_data['stuck_count'] = len(stuck_items)
+        ch_data['stuck_items'] = stuck_items
 
         result_channels.append(ch_data)
 
     conn.close()
     return {"channels": result_channels}
+
+def cmd_reset_chapter(ebook_no, voice_code, chapter_idx, stage=None):
+    from Utils.DB_Operations import createDB
+    dbops = createDB()
+    success = dbops.reset_chapter_status(int(ebook_no), int(voice_code), int(chapter_idx), stage)
+    return {"success": success, "message": f"Reset chapter {chapter_idx} voice {voice_code} for ebook {ebook_no}"}
+
+def cmd_reset_book(ebook_no):
+    from Utils.DB_Operations import createDB
+    dbops = createDB()
+    success = dbops.reset_book_processing(int(ebook_no))
+    return {"success": success, "message": f"Reset processing state for ebook {ebook_no}"}
 
 if __name__ == '__main__':
     args = sys.argv[1:]
@@ -478,5 +501,10 @@ if __name__ == '__main__':
         print(json.dumps(cmd_query_table(args[1], limit)))
     elif cmd == 'seed':
         print(json.dumps(cmd_seed_sample()))
+    elif cmd == 'reset_chapter' and len(args) >= 4:
+        stage = args[4] if len(args) > 4 else None
+        print(json.dumps(cmd_reset_chapter(args[1], args[2], args[3], stage)))
+    elif cmd == 'reset_book' and len(args) >= 2:
+        print(json.dumps(cmd_reset_book(args[1])))
     else:
         print(json.dumps({"error": f"Unknown command: {cmd}"}))

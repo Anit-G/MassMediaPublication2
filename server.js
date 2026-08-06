@@ -59,6 +59,26 @@ app.post('/api/db/seed', async (req, res) => {
   res.json(result);
 });
 
+app.post('/api/pipeline/reset-chapter', async (req, res) => {
+  const { ebook_no, voice_code, chapter_idx, stage } = req.body;
+  if (!ebook_no || !voice_code || chapter_idx === undefined) {
+    return res.status(400).json({ error: 'Missing ebook_no, voice_code, or chapter_idx' });
+  }
+  const args = ['reset_chapter', ebook_no, voice_code, chapter_idx];
+  if (stage) args.push(stage);
+  const result = await runPythonBridge(args);
+  res.json(result);
+});
+
+app.post('/api/pipeline/reset-book', async (req, res) => {
+  const { ebook_no } = req.body;
+  if (!ebook_no) {
+    return res.status(400).json({ error: 'Missing ebook_no' });
+  }
+  const result = await runPythonBridge(['reset_book', ebook_no]);
+  res.json(result);
+});
+
 app.get('/api/channels', (req, res) => {
   const channelFile = path.join(__dirname, 'Data/Channel Specs/Channel Names and Descriptions.txt');
   let textContent = '';

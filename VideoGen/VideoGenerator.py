@@ -226,19 +226,20 @@ class VideoGen:
         if use_short:
             start = time.time()
             shorts_audio_paths = self._dbops.can_start_shorts_video_gen(ebook_no, voice_code, section_no)
-            if shorts_audio_paths == []:
-                return None
-            
             for idx, audio_path in shorts_audio_paths:
-                self._dbops.update_shorts_status(ebook_no, voice_code, section_no, idx, Status.PossibleStates.VIDEO_GEN, Status.ChapterStatus.GENERATING)
-                # if shorts background file is a video then its in the BGV folder else it is in the BGP folder 
-                bg_file_pth = config.BGV_FOLDER + "/" + template["short"]
-                short_output_file_pth = write_path(ebook_no, voice_code, section_no, Status.PossibleStates.VIDEO_GEN, shorts_idx=idx)  
-                          
-                self._generate_video(audio_path, bg_music_pth, bg_file_pth, short_output_file_pth, signature(ebook_no, voice_code, section_no))
-                
-                # update db for shorts status
-                self._dbops.update_shorts_status(ebook_no, voice_code, section_no, idx, Status.PossibleStates.VIDEO_GEN, Status.ChapterStatus.COMPLETED)
+                try:
+                    self._dbops.update_shorts_status(ebook_no, voice_code, section_no, idx, Status.PossibleStates.VIDEO_GEN, Status.ChapterStatus.GENERATING)
+                    # if shorts background file is a video then its in the BGV folder else it is in the BGP folder 
+                    bg_file_pth = config.BGV_FOLDER + "/" + template["short"]
+                    short_output_file_pth = write_path(ebook_no, voice_code, section_no, Status.PossibleStates.VIDEO_GEN, shorts_idx=idx)  
+                              
+                    self._generate_video(audio_path, bg_music_pth, bg_file_pth, short_output_file_pth, signature(ebook_no, voice_code, section_no))
+                    
+                    # update db for shorts status
+                    self._dbops.update_shorts_status(ebook_no, voice_code, section_no, idx, Status.PossibleStates.VIDEO_GEN, Status.ChapterStatus.COMPLETED)
+                except Exception as exc:
+                    log.ERROR(f"VideoGen Shorts[{ebook_no}:{voice_code}:{section_no}]: failed short #{idx}: {exc}")
+                    self._dbops.mark_short_retry(ebook_no, voice_code, section_no, idx, Status.PossibleStates.VIDEO_GEN, str(exc))
             end = time.time()
             short_elapsed_str = f"{end-start:.2f}"
             log.INFO(f"Time taken to generate Shorts for book {ebook_no} section {section_no} voice \"{self._voice_map[voice_code]}\": Time {short_elapsed_str}")
@@ -247,6 +248,7 @@ class VideoGen:
         """
         Generate a single chapter video from a provided audio path.
         """
+        self.category = category
         res = self._dbops.get_next_action_category(category, Status.ProcessingStage.PROCESSING, Status.PossibleStates.VIDEO_GEN)
         if res is None:
             return False
@@ -259,18 +261,11 @@ class VideoGen:
         
         for voice_code in voice_codes:
             audio_path = self._dbops.can_start_video_gen(ebook_no, voice_code, chapter_idx)
-            if audio_path is None:
-                return False
+            if not audio_path or not os.path.exists(audio_path):
+                log.WARNING(f"VideoGen[{ebook_no}]: Audio path not ready or missing at {audio_path} for chapter {chapter_idx}, voice {voice_code}")
+                continue
             
             self._dbops.update_chapter_status(ebook_no, voice_code, chapter_idx, Status.PossibleStates.VIDEO_GEN, Status.ChapterStatus.GENERATING)
-                
-            if not audio_path:
-                log.ERROR(f"VideoGen[{ebook_no}]: Missing audio path for ebook {ebook_no} section {chapter_idx}")
-                return False
-
-            if not os.path.exists(audio_path):
-                log.ERROR(f"VideoGen[{ebook_no}]: Audio file not found at {audio_path} for ebook {ebook_no} section {chapter_idx}")
-                return False
             try:
                 book_record = [ebook_no, chapter_idx, voice_code, "", audio_path]
                 self.video_compiler(book_record, use_short=use_short, category=category)
@@ -281,12 +276,14 @@ class VideoGen:
                     Status.PossibleStates.VIDEO_GEN, str(exc), 
                     base_delay=config.RETRY_BASE_DELAY_SECONDS,
                     backoff_factor=config.RETRY_BACKOFF_FACTOR,
-                    max_retries=config.RETRY_MAX_ATTEMPTS,) 
+                    max_retries=config.RETRY_MAX_ATTEMPTS) 
         return True
     
     def generate_chapter_video_retries(self) -> None:
         video_chapter_list = self._dbops.get_stage_retries(Status.PossibleStates.VIDEO_GEN)
         for ebook_no, voice_code, chapter_idx, category in video_chapter_list:
+            if hasattr(self, 'category') and self.category and category != self.category:
+                continue
             try:
                 log.INFO(f"VideoGen[{ebook_no}:{voice_code}:{chapter_idx}]: begin retries")
                 self._dbops.update_chapter_status(ebook_no, voice_code, chapter_idx, Status.PossibleStates.VIDEO_GEN, Status.ChapterStatus.GENERATING)
@@ -300,4 +297,4 @@ class VideoGen:
                     Status.PossibleStates.VIDEO_GEN, str(exc), 
                     base_delay=config.RETRY_BASE_DELAY_SECONDS,
                     backoff_factor=config.RETRY_BACKOFF_FACTOR,
-                    max_retries=config.RETRY_MAX_ATTEMPTS,) 
+                    max_retries=config.RETRY_MAX_ATTEMPTS) 

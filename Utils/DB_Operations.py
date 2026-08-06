@@ -357,25 +357,47 @@ class DBOps:
             voice_res = self._cursor.fetchone()
             if not voice_res:
                 log.ERROR(f"DB: No voice codes found for category {category} in YOUTUBE MAP")
-                os.abort()
                 return None
             
-            voice_codes = voice_res[0].split(",")
+            voice_codes = [v.strip() for v in voice_res[0].split(",") if v.strip().isdigit()]
+            if not voice_codes:
+                log.ERROR(f"DB: No valid voice codes found for category {category}")
+                return None
             
-            # check chapter state for each voice code
-            for voice_code in voice_codes:
+            status_key = f"{prefix}_status"
+            voices_needing_work = []
+            all_voices_finished = True
+            
+            for vc_str in voice_codes:
+                voice_code = int(vc_str)
                 chapter_state = self.get_chapter_state(ebook_no, voice_code, curr_chapter_idx)
-                status_key = f"{prefix}_status"
-                if chapter_state and (chapter_state.get(status_key) in [Status.ChapterStatus.COMPLETED, Status.ChapterStatus.MANUAL_REVIEW_NEEDED]):
-                    curr_st = chapter_state.get(status_key)
-                    log.ERROR(f"DB: Chapter {curr_chapter_idx} for ebook {ebook_no} and voice code {voice_code} is already in status {curr_st}, skipping to next stage")
-                    return None
+                curr_st = chapter_state.get(status_key) if chapter_state else Status.ChapterStatus.NOT_STARTED
+                
+                if curr_st in [Status.ChapterStatus.COMPLETED, Status.ChapterStatus.MANUAL_REVIEW_NEEDED]:
+                    continue
                 else:
-                    log.INFO(f"DB: Chapter {curr_chapter_idx} for ebook {ebook_no} and voice code {voice_code} for stage {stage}, updating to GENERATING")
-                    if pipeState == Status.PossibleStates.UPLOAD:
-                        self.update_chapter_status(ebook_no, voice_code, curr_chapter_idx, pipeState, Status.ChapterStatus.UPLOADING)
+                    all_voices_finished = False
+                    voices_needing_work.append((voice_code, curr_st))
+            
+            if all_voices_finished:
+                if pipeState == Status.PossibleStates.UPLOAD:
+                    log.INFO(f"DB: Chapter {curr_chapter_idx} for ebook {ebook_no} is fully uploaded for all voices. Advancing chapter.")
+                    next_ch = curr_chapter_idx + 1
+                    if max_chapter_idx > 0 and next_ch >= max_chapter_idx:
+                        self.update_processing_state(ebook_no, category, Status.ProcessingStage.COMPLETE, max_chapter_idx)
                     else:
-                        self.update_chapter_status(ebook_no, voice_code, curr_chapter_idx, pipeState, Status.ChapterStatus.GENERATING)
+                        self.update_processing_state(ebook_no, category, Status.ProcessingStage.PROCESSING, next_ch)
+                    return self.get_next_action_category(category, Status.ProcessingStage.PROCESSING, pipeState)
+                else:
+                    log.INFO(f"DB: Chapter {curr_chapter_idx} for ebook {ebook_no} completed stage {pipeState} across all voices. Awaiting upload to advance.")
+                    return None
+            
+            for voice_code, curr_st in voices_needing_work:
+                log.INFO(f"DB: Chapter {curr_chapter_idx} for ebook {ebook_no} voice {voice_code} stage {pipeState}, status {curr_st} -> updating")
+                if pipeState == Status.PossibleStates.UPLOAD:
+                    self.update_chapter_status(ebook_no, voice_code, curr_chapter_idx, pipeState, Status.ChapterStatus.UPLOADING)
+                else:
+                    self.update_chapter_status(ebook_no, voice_code, curr_chapter_idx, pipeState, Status.ChapterStatus.GENERATING)
             
             return (ebook_no, curr_chapter_idx)
         except Exception as e:
@@ -1052,18 +1074,20 @@ class DBOps:
         
     def get_stage_retries(self, stage) -> List[Tuple[int, int, int, str]]:
         """
-        Query for chapters ready to retry.
-        Returns list of (ebook_no, voice_code, chapter_idx, stage) tuples
+        Query for chapters ready to retry based on next_retry_timestamp <= now.
+        Returns list of (ebook_no, voice_code, chapter_idx, category) tuples
         """
         prefix = Status.convertStages(stage)
         log.INFO(f"DB: Getting pending retries for {stage}")
         try:
+            current_time = datetime.now().isoformat()
             self._cursor.execute(f"""
             SELECT DISTINCT ebook_no, voice_code, chapter_idx, category
             FROM CHAPTER_PROGRESS 
             WHERE {prefix}_status = ?
+              AND (next_retry_timestamp IS NULL OR next_retry_timestamp <= ?)
             ORDER BY next_retry_timestamp ASC
-            """, (Status.ChapterStatus.FAILED,))
+            """, (Status.ChapterStatus.FAILED, current_time))
             
             result = self._cursor.fetchall()
             log.INFO(f"DB: Found {len(result)} chapters pending retry for {stage}")
@@ -1071,6 +1095,120 @@ class DBOps:
         except sqlite3.Error as e:
             log.ERROR(f"DB: Failed to get pending retries: {e}")
             return []
+
+    def mark_short_retry(self, ebook_no: int, voice_code: int, chapter_idx: int,
+                         short_idx: int, stage: str, error_msg: str,
+                         base_delay: int = 30, backoff_factor: int = 2, max_retries: int = 3) -> bool:
+        """
+        Mark a short for retry with exponential backoff in SHORTS_PROGRESS.
+        """
+        log.INFO(f"DB[{ebook_no}]: Marking short {short_idx} of chapter {chapter_idx} for retry on stage {stage}")
+        try:
+            prefix = Status.convertStages(stage)
+            if not prefix:
+                log.ERROR(f"DB[{ebook_no}]: Unknown stage {stage} for short retry")
+                return False
+
+            self._cursor.execute("""
+            SELECT retry_count, category FROM SHORTS_PROGRESS 
+            WHERE ebook_no = ? AND voice_code = ? AND chapter_idx = ? AND short_idx = ?
+            """, (ebook_no, voice_code, chapter_idx, short_idx))
+
+            row = self._cursor.fetchone()
+            retry_count = (row[0] if row else 0) + 1
+            category = row[1] if row else 'unknown'
+
+            delay_seconds = base_delay * (backoff_factor ** (retry_count - 1))
+            next_retry_time = datetime.now() + timedelta(seconds=delay_seconds)
+
+            if retry_count > max_retries:
+                new_status = Status.ChapterStatus.MANUAL_REVIEW_NEEDED
+            else:
+                new_status = Status.ChapterStatus.FAILED
+
+            query = f"""
+            UPDATE SHORTS_PROGRESS 
+            SET retry_count = ?, next_retry_timestamp = ?, error_message = ?,
+                last_status_change_timestamp = CURRENT_TIMESTAMP, {prefix}_status = ?
+            WHERE ebook_no = ? AND voice_code = ? AND chapter_idx = ? AND short_idx = ?
+            """
+
+            self._cursor.execute(query, (retry_count, next_retry_time.isoformat(), error_msg, new_status, ebook_no, voice_code, chapter_idx, short_idx))
+
+            if self._cursor.rowcount == 0:
+                query = f"""
+                INSERT INTO SHORTS_PROGRESS 
+                (ebook_no, voice_code, chapter_idx, short_idx, category, retry_count, 
+                 next_retry_timestamp, error_message, {prefix}_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                self._cursor.execute(query, (ebook_no, voice_code, chapter_idx, short_idx, category, retry_count, 
+                      next_retry_time.isoformat(), error_msg, new_status))
+
+            self._connection.commit()
+            return True
+        except sqlite3.Error as e:
+            log.ERROR(f"DB[{ebook_no}]: Failed to mark short for retry: {e}")
+            return False
+
+    def reset_chapter_status(self, ebook_no: int, voice_code: int, chapter_idx: int, stage: Optional[str] = None) -> bool:
+        """
+        Admin reset path: resets a chapter's status back to NOT_STARTED and clears retry state.
+        """
+        try:
+            if stage:
+                prefix = Status.convertStages(stage)
+                if not prefix:
+                    return False
+                query = f"""
+                UPDATE CHAPTER_PROGRESS
+                SET {prefix}_status = ?, retry_count = 0, next_retry_timestamp = NULL, error_message = NULL,
+                    last_status_change_timestamp = CURRENT_TIMESTAMP
+                WHERE ebook_no = ? AND voice_code = ? AND chapter_idx = ?
+                """
+                self._cursor.execute(query, (Status.ChapterStatus.NOT_STARTED, ebook_no, voice_code, chapter_idx))
+            else:
+                self._cursor.execute("""
+                UPDATE CHAPTER_PROGRESS
+                SET audio_status = ?, video_status = ?, upload_status = ?,
+                    retry_count = 0, next_retry_timestamp = NULL, error_message = NULL,
+                    last_status_change_timestamp = CURRENT_TIMESTAMP
+                WHERE ebook_no = ? AND voice_code = ? AND chapter_idx = ?
+                """, (Status.ChapterStatus.NOT_STARTED, Status.ChapterStatus.NOT_STARTED, Status.ChapterStatus.NOT_STARTED, ebook_no, voice_code, chapter_idx))
+
+            self._connection.commit()
+            log.INFO(f"DB[{ebook_no}]: Reset chapter status for chapter {chapter_idx}, voice {voice_code}")
+            return True
+        except sqlite3.Error as e:
+            log.ERROR(f"DB[{ebook_no}]: Failed to reset chapter status: {e}")
+            return False
+
+    def reset_book_processing(self, ebook_no: int) -> bool:
+        """
+        Admin reset path: resets a book's PROCESSING_STATE to IDLE and current_chapter_idx to 0,
+        and resets all chapter progress rows for that book.
+        """
+        try:
+            self._cursor.execute("""
+            UPDATE PROCESSING_STATE
+            SET stage = ?, current_chapter_idx = 0, last_updated_timestamp = CURRENT_TIMESTAMP, error_log = NULL
+            WHERE ebook_no = ?
+            """, (Status.ProcessingStage.IDLE, ebook_no))
+
+            self._cursor.execute("""
+            UPDATE CHAPTER_PROGRESS
+            SET audio_status = ?, video_status = ?, upload_status = ?,
+                retry_count = 0, next_retry_timestamp = NULL, error_message = NULL,
+                last_status_change_timestamp = CURRENT_TIMESTAMP
+            WHERE ebook_no = ?
+            """, (Status.ChapterStatus.NOT_STARTED, Status.ChapterStatus.NOT_STARTED, Status.ChapterStatus.NOT_STARTED, ebook_no))
+
+            self._connection.commit()
+            log.INFO(f"DB[{ebook_no}]: Reset processing state and chapter progress for book {ebook_no}")
+            return True
+        except sqlite3.Error as e:
+            log.ERROR(f"DB[{ebook_no}]: Failed to reset book processing state: {e}")
+            return False
 
 class createDB:
     _instance = None

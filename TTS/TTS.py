@@ -380,13 +380,11 @@ class TTS:
                 short_paths = self._generate_chapter_shorts_audio(ebook_no, voice_code, ch_idx, category, content) # type: ignore chapter content length is checked above
                 no_shorts = len(short_paths)
                 no_words = sum(len(s.split()) for s in self._clean_text(content)) # type: ignore content length is checked above
+                for short_id in range(len(short_paths)):
+                    self._dbops.update_shorts_status(ebook_no, voice_code, ch_idx, short_id, Status.PossibleStates.AUDIO_GEN, Status.ChapterStatus.COMPLETED)
             except Exception as exc:
                 log.ERROR(f"TTS[{ch_idx}:{ebook_no}:{voice_code}]: Shorts audio generation failed, error {exc}")
-                # TODO: DB update for failure for shorts
-            
-            # update DB with shorts info
-            for short_id in range(len(short_paths)):
-                self._dbops.update_shorts_status(ebook_no, voice_code, ch_idx, short_id, Status.PossibleStates.AUDIO_GEN, Status.ChapterStatus.COMPLETED)
+                self._dbops.mark_short_retry(ebook_no, voice_code, ch_idx, 0, Status.PossibleStates.AUDIO_GEN, str(exc))
         
         end = time.time()
         log.INFO(f"TTS[{ch_idx}:{ebook_no}:{voice_code}]: Runtime: {end-start:.2f} for Chapter idx: {ch_idx}")
