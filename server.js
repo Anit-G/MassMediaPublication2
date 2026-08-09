@@ -79,6 +79,17 @@ app.post('/api/pipeline/reset-book', async (req, res) => {
   res.json(result);
 });
 
+app.get('/api/youtube/tokens/status', async (req, res) => {
+  const result = await runPythonBridge(['youtube_tokens_status']);
+  res.json(result);
+});
+
+app.post('/api/youtube/tokens/refresh', async (req, res) => {
+  const { force = false, interactive = false } = req.body || {};
+  const result = await runPythonBridge(['refresh_youtube_tokens', force ? 'true' : 'false', interactive ? 'true' : 'false']);
+  res.json(result);
+});
+
 app.get('/api/channels', (req, res) => {
   const channelFile = path.join(__dirname, 'Data/Channel Specs/Channel Names and Descriptions.txt');
   let textContent = '';

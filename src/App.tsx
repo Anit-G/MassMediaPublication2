@@ -18,8 +18,34 @@ import {
   Sparkles,
   FileCode,
   ShieldCheck,
-  Cpu
+  Cpu,
+  KeyRound,
+  RotateCw,
+  ExternalLink
 } from 'lucide-react';
+
+interface YouTubeTokenInfo {
+  channel_name: string;
+  channel_id: string;
+  category: string;
+  handle: string;
+  status: string;
+  valid: boolean;
+  expired: boolean;
+  has_refresh_token: boolean;
+  expiry?: string;
+  error?: string;
+}
+
+interface TokenRefreshResult {
+  channel_name: string;
+  channel_id: string;
+  category: string;
+  action_taken: string;
+  success: boolean;
+  message: string;
+  auth_url?: string;
+}
 
 interface PipelineStatus {
   db_path?: string;
@@ -99,6 +125,46 @@ export default function App() {
   const [selectedScript, setSelectedScript] = useState<string>('main');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // YouTube Tokens state
+  const [tokenStatuses, setTokenStatuses] = useState<YouTubeTokenInfo[]>([]);
+  const [isRefreshingTokens, setIsRefreshingTokens] = useState(false);
+  const [tokenRefreshResults, setTokenRefreshResults] = useState<TokenRefreshResult[]>([]);
+
+  // Fetch YouTube Token Statuses
+  const fetchTokenStatuses = async () => {
+    try {
+      const res = await fetch('/api/youtube/tokens/status');
+      const data = await res.json();
+      if (data.channels && Array.isArray(data.channels)) {
+        setTokenStatuses(data.channels);
+      }
+    } catch (err) {
+      console.error('Failed to fetch YouTube token statuses:', err);
+    }
+  };
+
+  // Trigger Token Refresh Sequence
+  const handleTriggerTokenRefresh = async (force = false) => {
+    setIsRefreshingTokens(true);
+    setTokenRefreshResults([]);
+    try {
+      const res = await fetch('/api/youtube/tokens/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force })
+      });
+      const data = await res.json();
+      if (data.channel_reports && Array.isArray(data.channel_reports)) {
+        setTokenRefreshResults(data.channel_reports);
+      }
+      await fetchTokenStatuses();
+    } catch (err) {
+      console.error('Failed to trigger YouTube token refresh:', err);
+    } finally {
+      setIsRefreshingTokens(false);
+    }
+  };
+
   // Fetch status
   const fetchStatus = async () => {
     setIsRefreshing(true);
@@ -163,6 +229,7 @@ export default function App() {
     fetchStatus();
     fetchChannels();
     fetchChannelStatus();
+    fetchTokenStatuses();
 
     const interval = setInterval(async () => {
       try {
@@ -471,7 +538,7 @@ export default function App() {
                     No active output. Click "Execute Task" to launch a pipeline run or seed test data.
                   </div>
                 ) : (
-                  logs.map((line, idx) => (
+                  logs.map((line: string, idx: number) => (
                     <div key={idx} className="whitespace-pre-wrap leading-relaxed border-b border-slate-900/40 pb-0.5">
                       {line}
                     </div>
@@ -573,6 +640,118 @@ export default function App() {
 
         {activeTab === 'channels' && (
           <div className="space-y-6">
+            {/* YouTube Channel Token Management Section */}
+            <div className="bg-slate-900 border border-indigo-500/30 rounded-xl p-5 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <KeyRound className="w-5 h-5 text-indigo-400" /> YouTube Channel Token Manager & Refresh Sequence
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Manually trigger sequential token refresh or re-authentication for YouTube channels in required sequence:
+                    <span className="text-indigo-300 font-mono font-semibold ml-1">
+                      Echo's Slumber → Erebus Echoes → MoonBerry Echoes → Marrow and Manuscripts
+                    </span>
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => fetchTokenStatuses()}
+                    disabled={isRefreshingTokens}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg flex items-center gap-1.5 transition"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingTokens ? 'animate-spin' : ''}`} /> Check Status
+                  </button>
+
+                  <button
+                    onClick={() => handleTriggerTokenRefresh(false)}
+                    disabled={isRefreshingTokens}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 transition shadow-sm"
+                  >
+                    <RotateCw className={`w-3.5 h-3.5 ${isRefreshingTokens ? 'animate-spin' : ''}`} /> Trigger Token Refresh Sequence
+                  </button>
+
+                  <button
+                    onClick={() => handleTriggerTokenRefresh(true)}
+                    disabled={isRefreshingTokens}
+                    className="px-3.5 py-1.5 bg-amber-600/80 hover:bg-amber-500 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 transition shadow-sm"
+                    title="Force browser re-authentication flow for channel tokens"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Force Browser Auth
+                  </button>
+                </div>
+              </div>
+
+              {/* Sequential Token Status Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { name: "Echo's Slumber", id: "UCXeqq2XcvF7jjEcv35dPl8A", cat: "cat(RS)", handle: "@EchoSlumber", seq: 1 },
+                  { name: "Erebus Echoes", id: "UCfOw-0ovjVZSE8HvaCNJJ_Q", cat: "cat(MS)", handle: "@ErebosEchoes", seq: 2 },
+                  { name: "MoonBerry Echoes", id: "UCKpi4fdhxKbO_DWUD3FODTA", cat: "cat(WE)", handle: "@MoonBerryEchoes", seq: 3 },
+                  { name: "Marrow and Manuscripts", id: "UChDu5fX4ICAQSgdT653TGzA", cat: "cat(LM)", handle: "@MarrowManuscripts", seq: 4 }
+                ].map((target) => {
+                  const statusInfo = tokenStatuses.find(s => s.channel_id === target.id);
+                  const lastReport = tokenRefreshResults.find(r => r.channel_id === target.id);
+
+                  const isValid = statusInfo?.valid;
+                  const isExpired = statusInfo?.expired;
+                  const actionTaken = lastReport?.action_taken;
+
+                  return (
+                    <div key={target.id} className="bg-slate-950 border border-slate-800/80 rounded-lg p-3.5 space-y-2 flex flex-col justify-between">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 bg-indigo-950 text-indigo-300 border border-indigo-800/50 rounded text-[10px] font-mono font-bold">
+                            SEQ #{target.seq}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                            actionTaken === 'auto_refreshed' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                            isValid ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/60' :
+                            isExpired ? 'bg-amber-950 text-amber-300 border border-amber-800/60' :
+                            'bg-rose-950 text-rose-300 border border-rose-800/60'
+                          }`}>
+                            {actionTaken ? actionTaken.toUpperCase() : (isValid ? 'VALID' : (isExpired ? 'EXPIRED' : 'NO TOKEN'))}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-100">{target.name}</h4>
+                          <p className="text-[11px] text-indigo-400 font-mono">{target.handle}</p>
+                          <p className="text-[10px] text-slate-500 font-mono mt-0.5 truncate" title={target.id}>
+                            ID: {target.id}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800/60 text-[11px] font-mono space-y-1">
+                        {lastReport?.message && (
+                          <div className="text-[10px] text-slate-300 bg-slate-900 p-1.5 rounded">
+                            {lastReport.message}
+                          </div>
+                        )}
+                        {lastReport?.auth_url && (
+                          <a
+                            href={lastReport.auth_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300 underline font-bold"
+                          >
+                            Authenticate in Browser <ExternalLink className="w-3 h-3 inline" />
+                          </a>
+                        )}
+                        {statusInfo?.expiry && (
+                          <div className="text-[10px] text-slate-500">
+                            Expires: {new Date(statusInfo.expiry).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">

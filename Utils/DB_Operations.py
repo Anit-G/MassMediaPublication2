@@ -170,7 +170,17 @@ class DBOps:
             self._path = path
             self._connection = sqlite3.connect(self._path, check_same_thread=False)
             self._cursor = self._connection.cursor()
+            self._ensure_kvs_table()
             self._initialized = True
+
+    def _ensure_kvs_table(self):
+        try:
+            self._cursor.execute("SELECT 1 FROM KEY_VALUE_STORE LIMIT 1")
+        except sqlite3.OperationalError:
+            try:
+                self.createKVS()
+            except Exception as e:
+                log.WARNING(f"Could not auto-create KEY_VALUE_STORE: {e}")
     
     # ============================================================================
     # LEGACY METHODS
@@ -190,9 +200,16 @@ class DBOps:
     
     def get_value(self, key: str) -> list:
         log.INFO(f"DB: Get {key} from KVS")
-        self._cursor.execute("SELECT value, cypher_key FROM KEY_VALUE_STORE WHERE key = ?", (key,))
+        try:
+            self._cursor.execute("SELECT value, cypher_key FROM KEY_VALUE_STORE WHERE key = ?", (key,))
+        except sqlite3.OperationalError:
+            self._ensure_kvs_table()
+            try:
+                self._cursor.execute("SELECT value, cypher_key FROM KEY_VALUE_STORE WHERE key = ?", (key,))
+            except Exception:
+                return []
         res = self._cursor.fetchone()
-        return res if res else []    
+        return res if res else []
     
     def get_encrypted_data(self, key: str):
         log.INFO(f"DB: Get encrypted data")
@@ -217,18 +234,27 @@ class DBOps:
     
     def set_value(self, key: str, value: str, cypher_key: str = "") -> bool:
         log.INFO(f"DB: Set {key} in KVS")
-        self._cursor.execute("UPDATE KEY_VALUE_STORE SET value = ?, cypher_key = ? WHERE key = ?", (value, cypher_key, key,))
-        if self._cursor.rowcount == 0:
-            self._cursor.execute("INSERT INTO KEY_VALUE_STORE VALUES (?,?,?)", (key, value, cypher_key,))
+        try:
+            self._cursor.execute("UPDATE KEY_VALUE_STORE SET value = ?, cypher_key = ? WHERE key = ?", (value, cypher_key, key,))
             if self._cursor.rowcount == 0:
-                log.ERROR(f"DB: FAILED to Set for key {key} in KVS")
-                return False
-        return True
+                self._cursor.execute("INSERT INTO KEY_VALUE_STORE VALUES (?,?,?)", (key, value, cypher_key,))
+                if self._cursor.rowcount == 0:
+                    log.ERROR(f"DB: FAILED to Set for key {key} in KVS")
+                    return False
+            self._connection.commit()
+            return True
+        except sqlite3.OperationalError:
+            self._ensure_kvs_table()
+            self._cursor.execute("UPDATE KEY_VALUE_STORE SET value = ?, cypher_key = ? WHERE key = ?", (value, cypher_key, key,))
+            if self._cursor.rowcount == 0:
+                self._cursor.execute("INSERT INTO KEY_VALUE_STORE VALUES (?,?,?)", (key, value, cypher_key,))
+            self._connection.commit()
+            return True
     
     def set_channel_token(self, channel_id: str, token_value: str) -> bool:
         log.INFO(f"DB: set token value for {channel_id} in KVS")
         iv, encrypted_data = encrypt(token_value.encode('utf-8'))
-        res = self.set_value(f"toke_{channel_id}", encrypted_data.hex(), iv.hex())
+        res = self.set_value(f"token_{channel_id}", encrypted_data.hex(), iv.hex())
         return res
     
     # ============================================================================
@@ -1367,7 +1393,7 @@ class createDB:
     
     def createKVS(self):
         query = """
-        CREATE TABLE "KEY_VALUE_STORE" (
+        CREATE TABLE IF NOT EXISTS "KEY_VALUE_STORE" (
             "key"	TEXT NOT NULL,
             "value"	TEXT NOT NULL,
             "cypher_key"	TEXT DEFAULT 'NONE',
@@ -1405,7 +1431,7 @@ class createDB:
                     self._cursor.execute("INSERT INTO KEY_VALUE_STORE VALUES (?,?,?)", (key, encrypted_token.hex(), iv.hex(),))
                 except Exception as e:
                     log.ERROR(f"DB: Failed token read {key}: {e}")
-        
+        self._connection.commit()
     def generateTestContent(self, num: int) -> dict:
         content = {"ToC": {}, "Book_Content": {}}
         toc_dict = {}

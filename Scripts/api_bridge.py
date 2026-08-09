@@ -483,6 +483,26 @@ def cmd_reset_book(ebook_no):
     success = dbops.reset_book_processing(int(ebook_no))
     return {"success": success, "message": f"Reset processing state for ebook {ebook_no}"}
 
+def cmd_youtube_tokens_status():
+    from Scripts.refresh_youtube_tokens import TARGET_CHANNELS, inspect_channel_token
+    from Utils.DB_Operations import DBOps
+    dbops = DBOps()
+    statuses = []
+    for ch in TARGET_CHANNELS:
+        info = inspect_channel_token(dbops, ch["channel_id"])
+        info.update({
+            "channel_name": ch["name"],
+            "channel_id": ch["channel_id"],
+            "category": ch["category"],
+            "handle": ch["handle"]
+        })
+        statuses.append(info)
+    return {"channels": statuses}
+
+def cmd_refresh_youtube_tokens(force=False, interactive=False):
+    from Scripts.refresh_youtube_tokens import run_sequence
+    return run_sequence(force_manual=(str(force).lower() == 'true'), interactive=(str(interactive).lower() == 'true'))
+
 if __name__ == '__main__':
     args = sys.argv[1:]
     if not args:
@@ -506,5 +526,11 @@ if __name__ == '__main__':
         print(json.dumps(cmd_reset_chapter(args[1], args[2], args[3], stage)))
     elif cmd == 'reset_book' and len(args) >= 2:
         print(json.dumps(cmd_reset_book(args[1])))
+    elif cmd == 'youtube_tokens_status':
+        print(json.dumps(cmd_youtube_tokens_status()))
+    elif cmd == 'refresh_youtube_tokens':
+        force = args[1] if len(args) > 1 else 'false'
+        interactive = args[2] if len(args) > 2 else 'false'
+        print(json.dumps(cmd_refresh_youtube_tokens(force, interactive)))
     else:
         print(json.dumps({"error": f"Unknown command: {cmd}"}))
