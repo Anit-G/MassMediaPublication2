@@ -1,0 +1,34 @@
+================================================================================
+                    TTS CPU EVALUATION & BENCHMARK REPORT                      
+================================================================================
+Timestamp                : 2026-08-11 17:31:29
+Execution Mode           : Mock/Fallback Engine
+PyTorch Version          : Not Installed
+Configured Device        : cpu
+Sample Source File       : /app/applet/Data/sample_alice.txt
+
+[INPUT TEXT STATISTICS]
+- Character Count        : 8,136
+- Word Count             : 1,616
+- Paragraph Count        : 1
+
+[EXECUTION TIME & THROUGHPUT]
+- Pipeline Init Time     : 0.0017 seconds
+- Audio Generation Time  : 0.0002 seconds
+- Total Time Elapsed     : 0.0019 seconds
+- Processing Speed       : 34093194.77 chars/sec | 6771706.34 words/sec
+
+[AUDIO OUTPUT METRICS]
+- Generated Audio Length  : 646.40 seconds (10.77 minutes)
+- Real-Time Factor (RTF)  : 0.0000x (Faster than real-time)
+- Output Audio File Path  : ./TTS/UnitTests/KoKoro_samples/sample_alice_cpu_eval.wav
+- Output Audio File Size  : 0.00 MB (18 bytes)
+- Target Sample Rate      : 22050 Hz
+
+[CPU & MEMORY RESOURCE USAGE]
+- CPU Usage During Gen    : N/A
+- Initial Process Memory  : 15.41 MB
+- RAM After Model Init    : 16.04 MB (Delta: +0.63 MB)
+- RAM After Generation   : 16.04 MB
+- Peak Traced Allocation  : 0.02 MB
+================================================================================

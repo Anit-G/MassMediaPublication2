@@ -44,7 +44,8 @@ class TTS:
             for _, code in self._VOICE_MAP_ENG.items():
                 if(code[0] not in self._pipelines.keys()):
                     try:
-                        pipeline = WeightedKPipeline(lang_code=code[0], device='cpu', repo_id='hexgrad/Kokoro-82M')
+                        device = getattr(config, 'TTS_DEVICE', 'cpu')
+                        pipeline = WeightedKPipeline(lang_code=code[0], device=device, repo_id='hexgrad/Kokoro-82M')
                         self._pipelines[code[0]] = pipeline
                     except Exception as e:
                         log.ERROR(f"Failed to initialize WeightedKPipeline for {code[0]}: {e}")

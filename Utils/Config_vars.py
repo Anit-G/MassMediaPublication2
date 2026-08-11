@@ -18,6 +18,8 @@ USE_REQUEST = True
 JSON_FILEPATH = "./Data/JSONlib"
 
 """ TTS Related Configurable variables """
+# Hardware device for TTS model ('cpu', 'cuda', etc.)
+TTS_DEVICE = 'cpu'
 # path to save to the audio files
 AUD_FILEPATH = './Data/AudFiles'
 # Running the TTS BACKEND
