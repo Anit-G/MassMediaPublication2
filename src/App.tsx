@@ -21,13 +21,7 @@ import {
   Cpu,
   KeyRound,
   RotateCw,
-  ExternalLink,
-  Upload,
-  FileJson,
-  Check,
-  Lock,
-  ChevronDown,
-  ChevronUp
+  ExternalLink
 } from 'lucide-react';
 
 interface YouTubeTokenInfo {
@@ -135,12 +129,6 @@ export default function App() {
   const [tokenStatuses, setTokenStatuses] = useState<YouTubeTokenInfo[]>([]);
   const [isRefreshingTokens, setIsRefreshingTokens] = useState(false);
   const [tokenRefreshResults, setTokenRefreshResults] = useState<TokenRefreshResult[]>([]);
-  const [showSecretModal, setShowSecretModal] = useState(false);
-  const [clientSecretInput, setClientSecretInput] = useState('');
-  const [selectedChannelForToken, setSelectedChannelForToken] = useState('UCXeqq2XcvF7jjEcv35dPl8A');
-  const [channelTokenInput, setChannelTokenInput] = useState('');
-  const [secretSaveMessage, setSecretSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [isSavingSecret, setIsSavingSecret] = useState(false);
 
   // Fetch YouTube Token Statuses
   const fetchTokenStatuses = async () => {
@@ -152,82 +140,6 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to fetch YouTube token statuses:', err);
-    }
-  };
-
-  // Save client secret
-  const handleSaveClientSecret = async () => {
-    if (!clientSecretInput.trim()) {
-      setSecretSaveMessage({ type: 'error', text: 'Please paste client_secrets.json content' });
-      return;
-    }
-    setIsSavingSecret(true);
-    setSecretSaveMessage(null);
-    try {
-      let parsed;
-      try {
-        parsed = JSON.parse(clientSecretInput);
-      } catch (e) {
-        setSecretSaveMessage({ type: 'error', text: 'Invalid JSON format for client secrets' });
-        setIsSavingSecret(false);
-        return;
-      }
-
-      const res = await fetch('/api/youtube/client-secret', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secret: parsed })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSecretSaveMessage({ type: 'success', text: 'Client secret successfully stored in DB and filesystem!' });
-        setClientSecretInput('');
-        await fetchTokenStatuses();
-      } else {
-        setSecretSaveMessage({ type: 'error', text: data.error || data.message || 'Failed to save client secret' });
-      }
-    } catch (err: any) {
-      setSecretSaveMessage({ type: 'error', text: err.message || 'Network error saving client secret' });
-    } finally {
-      setIsSavingSecret(false);
-    }
-  };
-
-  // Save channel token
-  const handleSaveChannelToken = async () => {
-    if (!channelTokenInput.trim()) {
-      setSecretSaveMessage({ type: 'error', text: 'Please paste token JSON content' });
-      return;
-    }
-    setIsSavingSecret(true);
-    setSecretSaveMessage(null);
-    try {
-      let parsed;
-      try {
-        parsed = JSON.parse(channelTokenInput);
-      } catch (e) {
-        setSecretSaveMessage({ type: 'error', text: 'Invalid JSON format for channel token' });
-        setIsSavingSecret(false);
-        return;
-      }
-
-      const res = await fetch(`/api/youtube/token/${selectedChannelForToken}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: parsed })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSecretSaveMessage({ type: 'success', text: `Token for channel ${selectedChannelForToken} successfully stored!` });
-        setChannelTokenInput('');
-        await fetchTokenStatuses();
-      } else {
-        setSecretSaveMessage({ type: 'error', text: data.error || data.message || 'Failed to save token' });
-      }
-    } catch (err: any) {
-      setSecretSaveMessage({ type: 'error', text: err.message || 'Network error saving token' });
-    } finally {
-      setIsSavingSecret(false);
     }
   };
 
@@ -745,15 +657,6 @@ export default function App() {
 
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    onClick={() => setShowSecretModal(!showSecretModal)}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg flex items-center gap-1.5 transition border border-slate-700"
-                  >
-                    <Lock className="w-3.5 h-3.5 text-indigo-400" />
-                    {showSecretModal ? 'Hide Secret Config' : 'Configure Secrets / Tokens'}
-                    {showSecretModal ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                  </button>
-
-                  <button
                     onClick={() => fetchTokenStatuses()}
                     disabled={isRefreshingTokens}
                     className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg flex items-center gap-1.5 transition"
@@ -779,98 +682,6 @@ export default function App() {
                   </button>
                 </div>
               </div>
-
-              {/* Collapsible Secret / Token Configuration Panel */}
-              {showSecretModal && (
-                <div className="p-4 bg-slate-950/90 border border-indigo-900/50 rounded-xl space-y-4 animate-in fade-in">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
-                        <KeyRound className="w-4 h-4 text-indigo-400" /> OAuth Credentials & Token Configuration
-                      </h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        Provide your Google OAuth <code>client_secrets.json</code> or channel-specific tokens directly to persist in the encrypted KVS database and filesystem.
-                      </p>
-                    </div>
-                  </div>
-
-                  {secretSaveMessage && (
-                    <div className={`p-2.5 rounded text-xs flex items-center gap-2 ${
-                      secretSaveMessage.type === 'success' 
-                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' 
-                        : 'bg-rose-950 text-rose-300 border border-rose-800'
-                    }`}>
-                      {secretSaveMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-                      <span>{secretSaveMessage.text}</span>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* Option A: Client Secrets JSON */}
-                    <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-3.5 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                          <FileJson className="w-3.5 h-3.5 text-indigo-400" /> 1. Upload / Paste client_secrets.json
-                        </label>
-                        <span className="text-[10px] font-mono text-slate-400">./Data/Secrets/client_secrets.json</span>
-                      </div>
-                      <textarea
-                        value={clientSecretInput}
-                        onChange={(e) => setClientSecretInput(e.target.value)}
-                        placeholder='{"installed": {"client_id": "...", "client_secret": "..."}}'
-                        rows={4}
-                        className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs font-mono text-slate-300 focus:outline-none focus:border-indigo-500"
-                      />
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-slate-500">Encrypted in DB with AES-256</span>
-                        <button
-                          onClick={handleSaveClientSecret}
-                          disabled={isSavingSecret}
-                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded flex items-center gap-1.5 transition"
-                        >
-                          <Upload className="w-3 h-3" /> Save Client Secrets
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Option B: Channel Specific Token JSON */}
-                    <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-3.5 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                          <KeyRound className="w-3.5 h-3.5 text-amber-400" /> 2. Upload / Paste Channel Token JSON
-                        </label>
-                        <select
-                          value={selectedChannelForToken}
-                          onChange={(e) => setSelectedChannelForToken(e.target.value)}
-                          className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs text-indigo-300 font-mono focus:outline-none"
-                        >
-                          <option value="UCXeqq2XcvF7jjEcv35dPl8A">Echo's Slumber (RS)</option>
-                          <option value="UCfOw-0ovjVZSE8HvaCNJJ_Q">Erebus Echoes (MS)</option>
-                          <option value="UCKpi4fdhxKbO_DWUD3FODTA">MoonBerry Echoes (WE)</option>
-                          <option value="UChDu5fX4ICAQSgdT653TGzA">Marrow & Manuscripts (LM)</option>
-                        </select>
-                      </div>
-                      <textarea
-                        value={channelTokenInput}
-                        onChange={(e) => setChannelTokenInput(e.target.value)}
-                        placeholder='{"token": "...", "refresh_token": "...", "token_uri": "https://oauth2.googleapis.com/token", "client_id": "...", "client_secret": "...", "scopes": [...]}'
-                        rows={4}
-                        className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs font-mono text-slate-300 focus:outline-none focus:border-indigo-500"
-                      />
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-slate-500">Saves directly as channel authorized token</span>
-                        <button
-                          onClick={handleSaveChannelToken}
-                          disabled={isSavingSecret}
-                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium rounded flex items-center gap-1.5 transition"
-                        >
-                          <Upload className="w-3 h-3" /> Save Channel Token
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Sequential Token Status Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">

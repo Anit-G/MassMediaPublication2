@@ -16,25 +16,13 @@ app.use(express.json());
 
 // Helper to run python commands
 function runPythonBridge(args) {
-  return new Promise((resolve) => {
-    const py = spawn('python3', ['Scripts/api_bridge.py', ...args], { cwd: __dirname });
-    let stdout = '';
-    let stderr = '';
-
-    py.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    py.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    py.on('close', (code) => {
-      if (code !== 0 && !stdout) {
-        return resolve({ error: `Process exited with code ${code}`, stderr });
+  return new Promise((resolve, reject) => {
+    const py = exec(`python3 Scripts/api_bridge.py ${args.join(' ')}`, { cwd: __dirname }, (error, stdout, stderr) => {
+      if (error) {
+        return resolve({ error: error.message, stderr });
       }
       try {
-        const json = JSON.parse(stdout.trim());
+        const json = JSON.parse(stdout);
         resolve(json);
       } catch (e) {
         resolve({ raw: stdout, stderr });
@@ -99,27 +87,6 @@ app.get('/api/youtube/tokens/status', async (req, res) => {
 app.post('/api/youtube/tokens/refresh', async (req, res) => {
   const { force = false, interactive = false } = req.body || {};
   const result = await runPythonBridge(['refresh_youtube_tokens', force ? 'true' : 'false', interactive ? 'true' : 'false']);
-  res.json(result);
-});
-
-app.post('/api/youtube/client-secret', async (req, res) => {
-  const { secret } = req.body;
-  if (!secret) {
-    return res.status(400).json({ error: 'Missing secret payload' });
-  }
-  const secretStr = typeof secret === 'string' ? secret : JSON.stringify(secret);
-  const result = await runPythonBridge(['set_client_secret', secretStr]);
-  res.json(result);
-});
-
-app.post('/api/youtube/token/:channelId', async (req, res) => {
-  const { channelId } = req.params;
-  const { token } = req.body;
-  if (!channelId || !token) {
-    return res.status(400).json({ error: 'Missing channelId or token payload' });
-  }
-  const tokenStr = typeof token === 'string' ? token : JSON.stringify(token);
-  const result = await runPythonBridge(['set_channel_token', channelId, tokenStr]);
   res.json(result);
 });
 
