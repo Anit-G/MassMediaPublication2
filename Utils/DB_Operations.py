@@ -223,13 +223,33 @@ class DBOps:
     def get_client_secret(self):
         data = self.get_encrypted_data("client_secret")
         if data:
-            return json.loads(data.decode('utf-8'))
+            try:
+                return json.loads(data.decode('utf-8'))
+            except Exception:
+                return data.decode('utf-8')
         return ""
     
+    def set_client_secret(self, secret_value) -> bool:
+        log.INFO("DB: Set client_secret in KVS")
+        try:
+            if isinstance(secret_value, dict):
+                secret_str = json.dumps(secret_value)
+            else:
+                secret_str = str(secret_value)
+            iv, encrypted_data = encrypt(secret_str.encode('utf-8'))
+            res = self.set_value("client_secret", encrypted_data.hex(), iv.hex())
+            return res
+        except Exception as e:
+            log.ERROR(f"DB: Failed to set client_secret: {e}")
+            return False
+
     def get_channel_token(self, channel_id: str):
         data = self.get_encrypted_data(f"token_{channel_id}")
         if data:
-            return json.loads(data.decode('utf-8'))
+            try:
+                return json.loads(data.decode('utf-8'))
+            except Exception:
+                return data.decode('utf-8')
         return ""
     
     def set_value(self, key: str, value: str, cypher_key: str = "") -> bool:
@@ -251,11 +271,19 @@ class DBOps:
             self._connection.commit()
             return True
     
-    def set_channel_token(self, channel_id: str, token_value: str) -> bool:
+    def set_channel_token(self, channel_id: str, token_value) -> bool:
         log.INFO(f"DB: set token value for {channel_id} in KVS")
-        iv, encrypted_data = encrypt(token_value.encode('utf-8'))
-        res = self.set_value(f"token_{channel_id}", encrypted_data.hex(), iv.hex())
-        return res
+        try:
+            if isinstance(token_value, dict):
+                token_str = json.dumps(token_value)
+            else:
+                token_str = str(token_value)
+            iv, encrypted_data = encrypt(token_str.encode('utf-8'))
+            res = self.set_value(f"token_{channel_id}", encrypted_data.hex(), iv.hex())
+            return res
+        except Exception as e:
+            log.ERROR(f"DB: Failed to set channel token: {e}")
+            return False
     
     # ============================================================================
     # EBOOK METADATA METHODS

@@ -499,6 +499,34 @@ def cmd_youtube_tokens_status():
         statuses.append(info)
     return {"channels": statuses}
 
+def cmd_set_client_secret(secret_json_str):
+    from Utils.DB_Operations import DBOps
+    from Scripts.refresh_youtube_tokens import load_client_secret
+    dbops = DBOps()
+    try:
+        parsed = json.loads(secret_json_str) if isinstance(secret_json_str, str) else secret_json_str
+        success = dbops.set_client_secret(parsed)
+        # Also ensure directory and file if possible
+        os.makedirs("./Data/Secrets", exist_ok=True)
+        with open("./Data/Secrets/client_secrets.json", "w", encoding="utf-8") as f:
+            json.dump(parsed, f, indent=2)
+        return {"success": success, "message": "Client secret updated in DB and filesystem"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def cmd_set_channel_token(channel_id, token_json_str):
+    from Utils.DB_Operations import DBOps
+    dbops = DBOps()
+    try:
+        parsed = json.loads(token_json_str) if isinstance(token_json_str, str) else token_json_str
+        success = dbops.set_channel_token(channel_id, parsed)
+        os.makedirs("./Data/Secrets", exist_ok=True)
+        with open(f"./Data/Secrets/token_{channel_id}.json", "w", encoding="utf-8") as f:
+            json.dump(parsed, f, indent=2)
+        return {"success": success, "message": f"Token for channel {channel_id} updated in DB and filesystem"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 def cmd_refresh_youtube_tokens(force=False, interactive=False):
     from Scripts.refresh_youtube_tokens import run_sequence
     return run_sequence(force_manual=(str(force).lower() == 'true'), interactive=(str(interactive).lower() == 'true'))
@@ -532,5 +560,9 @@ if __name__ == '__main__':
         force = args[1] if len(args) > 1 else 'false'
         interactive = args[2] if len(args) > 2 else 'false'
         print(json.dumps(cmd_refresh_youtube_tokens(force, interactive)))
+    elif cmd == 'set_client_secret' and len(args) >= 2:
+        print(json.dumps(cmd_set_client_secret(args[1])))
+    elif cmd == 'set_channel_token' and len(args) >= 3:
+        print(json.dumps(cmd_set_channel_token(args[1], args[2])))
     else:
         print(json.dumps({"error": f"Unknown command: {cmd}"}))
